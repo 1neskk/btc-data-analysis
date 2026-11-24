@@ -11,7 +11,7 @@
 | Integrante | RA | Papel principal |
 |---|---|---|
 | _[Nome do(a) aluno(a) 1]_ | _[RA]_ | _[ex.: ETL e qualidade de dados]_ |
-| _[Nome do(a) aluno(a) 2]_ | _[RA]_ | _[ex.: EDA e visualização]_ |
+| _[Daniel Almeida Portela]_ | _[825234443]_ | _[ex.: EDA e visualização]_ |
 | _[Nome do(a) aluno(a) 3]_ | _[RA]_ | _[ex.: storytelling, ética e LGPD]_ |
 
 ---
