@@ -1,0 +1,7 @@
+# Dados: a licença da base proíbe redistribuição; o notebook baixa e confere o hash.
+data/
+
+# Ambiente local
+.venv/
+__pycache__/
+.ipynb_checkpoints/
