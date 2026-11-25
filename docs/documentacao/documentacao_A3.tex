@@ -1,0 +1,408 @@
+% =============================================================================
+% Documentação técnica do Projeto Analítico A3 — Microestrutura BTC/USDT
+% Formatação: ABNT (NBR 14724, 6023, 6024, 6027, 6028, 10520) via classe abnTeX2.
+%
+% Compilação (a partir desta pasta):
+%   latexmk -pdf documentacao_A3.tex
+% Para preencher o nome do(a) professor(a), edite \nomeprofessor abaixo.
+% =============================================================================
+\documentclass[
+  12pt,
+  openany,
+  oneside,
+  a4paper,
+  chapter=TITLE,
+  section=TITLE,
+  english,
+  brazil,
+  sumario=tradicional
+]{abntex2}
+
+% --- Codificação, fontes e matemática ----------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}   % fonte com serifa tipo Times (texto e matemática)
+\usepackage[varqu,scaled=0.88]{zi4} % monoespaçada (Inconsolata) para código
+\usepackage{icomma}                % vírgula decimal em modo matemático: $0,385$
+\usepackage{indentfirst}
+\usepackage{microtype}
+
+% --- Tabelas, figuras e diagramas ---------------------------------------------
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{placeins}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,calc,shapes.misc,backgrounds}
+\usepackage{listings}
+\usepackage{dirtree}
+
+% --- Citações e referências (NBR 10520 / NBR 6023) -----------------------------
+\usepackage[alf,abnt-emphasize=bf]{abntex2cite}
+% NBR 6023:2018 dispensa os sinais < > em torno de endereços eletrônicos.
+\def\UrlLeft{}\def\UrlRight{}
+
+% --- Dados do trabalho ---------------------------------------------------------
+\newcommand{\nomeprofessor}{[nome do(a) professor(a) a preencher]}
+
+\titulo{Microestrutura do Bitcoin (BTC/USDT) em uma semana de estresse: documentação técnica do Projeto Analítico A3}
+\autor{Gabriel Almeida Portela\\Daniel Almeida Portela}
+\local{São Paulo}
+\data{2026}
+\instituicao{Universidade São Judas Tadeu}
+\orientador[Professor(a):]{\nomeprofessor}
+\tipotrabalho{Relatório técnico}
+\preambulo{Documentação técnica do Projeto Analítico apresentada à Unidade
+Curricular Análise de Dados e Big Data (0005073) da Universidade São Judas Tadeu,
+como parte da Avaliação A3 (Avaliação Continuada de Desempenho de
+Compreensão), semestre 2026/2.}
+
+% --- Cores (mesma paleta funcional do projeto) ------------------------------------
+\definecolor{azul}{HTML}{2A78D6}
+\definecolor{azulclaro}{HTML}{CDE2FB}
+\definecolor{laranja}{HTML}{EB6834}
+\definecolor{laranjaclaro}{HTML}{FBE3D9}
+\definecolor{cinza}{HTML}{898781}
+\definecolor{cinzaclaro}{HTML}{F0EFEC}
+\definecolor{tinta}{HTML}{52514E}
+
+% --- Aparência dos títulos (NBR 6024) ---------------------------------------------
+% Primária: negrito e maiúsculas; secundária: maiúsculas; terciária: negrito;
+% quaternária: normal. Todas no mesmo corpo do texto.
+\renewcommand{\ABNTEXchapterfont}{\rmfamily\bfseries}
+\renewcommand{\ABNTEXchapterfontsize}{\normalsize}
+\renewcommand{\ABNTEXpartfont}{\rmfamily\bfseries}
+\renewcommand{\ABNTEXsectionfont}{\rmfamily\mdseries}
+\renewcommand{\ABNTEXsectionfontsize}{\normalsize}
+\renewcommand{\ABNTEXsubsectionfont}{\rmfamily\bfseries}
+\renewcommand{\ABNTEXsubsectionfontsize}{\normalsize}
+\renewcommand{\ABNTEXsubsubsectionfont}{\rmfamily\mdseries}
+\renewcommand{\ABNTEXsubsubsectionfontsize}{\normalsize}
+
+% Legendas de ilustrações e tabelas em fonte menor (NBR 14724, 5.1)
+\captionnamefont{\small}
+\captiontitlefont{\small}
+
+% --- Metadados do PDF ---------------------------------------------------------------
+\makeatletter
+\hypersetup{
+  pdftitle={Microestrutura do Bitcoin (BTC/USDT) em uma semana de estresse},
+  pdfauthor={Gabriel Almeida Portela; Daniel Almeida Portela},
+  pdfsubject={Documentação técnica do Projeto Analítico A3 — Análise de Dados e Big Data},
+  pdfkeywords={microestrutura de mercado}{Bitcoin}{ETL}{qualidade de dados}{walk-forward},
+  pdfcreator={LaTeX com abnTeX2},
+  hidelinks,
+  bookmarksdepth=4
+}
+\makeatother
+
+% --- Float "Quadro" (conteúdo textual, bordas fechadas) e sua lista ----------------
+\newcommand{\quadroname}{Quadro}
+\newcommand{\listofquadrosname}{Lista de quadros}
+\newfloat[chapter]{quadro}{loq}{\quadroname}
+\newlistof{listofquadros}{loq}{\listofquadrosname}
+\newlistentry{quadro}{loq}{0}
+\counterwithout{quadro}{chapter}
+\renewcommand{\cftquadroname}{\quadroname\space}
+\renewcommand*{\cftquadroaftersnum}{\hfill\textendash\hfill}
+\setfloatlocations{quadro}{htbp}
+\providecommand{\quadroautorefname}{Quadro}
+% Numeração contínua (não reinicia por capítulo) para figuras e tabelas
+\counterwithout{figure}{chapter}
+\counterwithout{table}{chapter}
+
+% --- Macros utilitárias ---------------------------------------------------------------
+% Identificadores de código: monoespaçados e com quebra de linha permitida em _ / . -
+\DeclareUrlCommand\code{\urlstyle{tt}\def\UrlBreaks{\do\_\do\/\do\.\do\-\do\(}}
+\newcommand{\usd}{US\$}
+\newcommand{\fonteautores}[1][Elaborada]{\fonte{#1 pelos autores (2026).}}
+\newcommand{\fontedados}[1][Elaborada]{\fonte{#1 pelos autores (2026), com dados de \citeonline{glitchlist2026}.}}
+% Ambiente de tabela no padrão IBGE (bordas laterais abertas), corpo menor e espaço simples
+\newenvironment{corpotabela}{\footnotesize\SingleSpacing\centering}{}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedleft\arraybackslash}p{#1}}
+
+% Listagens de comandos e código
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{cinza},
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  showstringspaces=false,
+  aboveskip=8pt,
+  belowskip=8pt,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+           {ã}{{\~a}}1 {õ}{{\~o}}1 {ç}{{\c c}}1 {â}{{\^a}}1 {ê}{{\^e}}1 {ô}{{\^o}}1
+           {Á}{{\'A}}1 {É}{{\'E}}1 {Ç}{{\c C}}1 {Ã}{{\~A}}1
+}
+
+% Posicionamento de ilustrações: menos páginas só de figuras, alinhadas ao topo
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.8}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{12pt plus 2fil}
+\setlength{\@fpbot}{0pt plus 1fil}
+\makeatother
+
+% Espaçamento do parágrafo e recuo
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0.2cm}
+
+\makeindex
+
+% =============================================================================
+\begin{document}
+
+\selectlanguage{brazil}
+\frenchspacing
+
+% ---------------------------------------------------------------------------------
+% ELEMENTOS PRÉ-TEXTUAIS
+% ---------------------------------------------------------------------------------
+\pretextual
+
+% Capa: instituição, autores, título, local e ano
+\renewcommand{\imprimircapa}{%
+  \begin{capa}%
+    \center
+    {\ABNTEXchapterfont\MakeUppercase{\imprimirinstituicao}}\par
+    {\ABNTEXchapterfont Unidade Curricular: Análise de Dados e Big Data (0005073)}
+    \vspace*{2.5cm}
+
+    {\ABNTEXchapterfont\MakeUppercase{Gabriel Almeida Portela}}\par
+    {\ABNTEXchapterfont\MakeUppercase{Daniel Almeida Portela}}
+    \vfill
+
+    \begin{center}
+      \ABNTEXchapterfont\bfseries
+      MICROESTRUTURA DO BITCOIN (BTC/USDT) EM UMA SEMANA DE ESTRESSE:\par
+      \mdseries documentação técnica do Projeto Analítico A3
+    \end{center}
+    \vfill
+
+    \MakeUppercase{\imprimirlocal}\par
+    \imprimirdata
+    \vspace*{1cm}
+  \end{capa}
+}
+\imprimircapa
+
+% Folha de rosto (sem ficha catalográfica no verso, por ser relatório de disciplina)
+\makeatletter
+\renewcommand{\folhaderostocontent}{%
+  \begin{center}
+    {\ABNTEXchapterfont Gabriel Almeida Portela -- RA 825233281}\par
+    {\ABNTEXchapterfont Daniel Almeida Portela -- RA 825234443}
+    \vspace*{\fill}\vspace*{\fill}
+
+    \begin{center}
+      \ABNTEXchapterfont\bfseries
+      MICROESTRUTURA DO BITCOIN (BTC/USDT) EM UMA SEMANA DE ESTRESSE:\par
+      \mdseries documentação técnica do Projeto Analítico A3
+    \end{center}
+    \vspace*{\fill}
+
+    \abntex@ifnotempty{\imprimirpreambulo}{%
+      \hspace{.45\textwidth}
+      \begin{minipage}{.5\textwidth}
+        \SingleSpacing
+        \imprimirpreambulo
+        \par\vspace{0.6cm}
+        \imprimirorientadorRotulo~\imprimirorientador
+      \end{minipage}%
+      \vspace*{\fill}
+    }%
+    \vspace*{\fill}
+
+    {\MakeUppercase{\imprimirlocal}}\par
+    {\imprimirdata}
+    \vspace*{1cm}
+  \end{center}
+}
+\makeatother
+\imprimirfolhaderosto*
+
+% ---------------------------------------------------------------------------------
+% Resumo na língua vernácula (NBR 6028)
+% ---------------------------------------------------------------------------------
+\setlength{\absparsep}{18pt}
+\begin{resumo}
+Este documento descreve, de ponta a ponta, o Projeto Analítico A3 da unidade
+curricular Análise de Dados e Big Data, que investiga a microestrutura do mercado
+à vista de bitcoin (par BTC/USDT na corretora Binance) entre 19 e 25 de fevereiro
+de 2025, semana marcada pelo ataque hacker à corretora Bybit e por uma queda de
+13,5\,\% no preço. O cenário simulado é o de uma mesa de execução de
+criptoativos que precisa decidir quando e como executar ordens grandes e como
+calibrar seus controles de risco. A base pública utilizada contém 27.925.338
+negócios individuais e 9 colunas e foi fixada por versão e conferida por
+resumo criptográfico SHA-256. A auditoria de qualidade identificou um carimbo
+de ingestão 100\,\% inválido, tipos inadequados, colunas constantes e
+redundantes e 41,7\,\% de duplicatas aparentes que, na verdade, são execuções
+parciais legítimas e não podem ser removidas. Após a limpeza, a base foi
+reconciliada minuto a minuto com os dados oficiais da Binance, com concordância
+de 100\,\% nos 10.080 minutos, e agregada em barras de 1 minuto, barras de
+1 segundo e ordens agressoras. A análise exploratória mostrou que a liquidez se
+concentra às 15h UTC (4,2 vezes a hora mais fraca), que os dias de estresse
+têm volume 2,7 vezes e volatilidade 2,0 vezes maiores que um dia útil normal e
+que negócios acima de \usd~10 mil representam 1,4\,\% da contagem e 59,8\,\% do
+valor negociado. Na etapa preditiva, com validação \textit{walk-forward} e
+atributos estritamente causais, a volatilidade do minuto seguinte mostrou-se
+previsível ($R^2 = 0,385$ com regressão Ridge), enquanto a direção do preço
+não gerou ganho capaz de cobrir os custos de transação. Os resultados foram
+comunicados em um painel interativo e em uma narrativa orientada à decisão, com
+análise de ética, conformidade com a LGPD e limitações.
+
+\vspace{\onelineskip}
+\noindent\textbf{Palavras-chave}: microestrutura de mercado; Bitcoin; qualidade de
+dados; ETL; validação \textit{walk-forward}.
+\end{resumo}
+
+% ---------------------------------------------------------------------------------
+% Resumo em língua estrangeira
+% ---------------------------------------------------------------------------------
+\begin{resumo}[Abstract]
+\begin{otherlanguage*}{english}
+This document describes, end to end, the A3 Analytical Project of the Data
+Analysis and Big Data course, which investigates the market microstructure of
+spot bitcoin (the BTC/USDT pair on Binance) between 19 and 25 February 2025, a
+week marked by the hack of the Bybit exchange and a 13.5\,\% price drop. The
+simulated scenario is a crypto-asset execution desk that must decide when and
+how to execute large orders and how to calibrate its risk controls. The public
+dataset contains 27,925,338 individual trades and 9 columns; it was pinned to a
+fixed revision and verified with a SHA-256 digest. The data-quality audit found
+a fully invalid ingestion timestamp, inappropriate data types, constant and
+redundant columns, and 41.7\,\% apparent duplicates that are in fact legitimate
+partial fills and must not be removed. After cleaning, the data was reconciled
+minute by minute against Binance's official candles, with 100\,\% agreement over
+all 10,080 minutes, and aggregated into 1-minute bars, 1-second bars and
+aggressor orders. Exploratory analysis showed that liquidity peaks at 15:00 UTC
+(4.2 times the quietest hour), that stress days carry 2.7 times the volume and
+2.0 times the volatility of a normal weekday, and that trades above US\$~10
+thousand represent 1.4\,\% of the count but 59.8\,\% of the traded value. In the
+predictive stage, using walk-forward validation and strictly causal features,
+next-minute volatility proved predictable ($R^2 = 0.385$ with Ridge
+regression), whereas price direction yielded no edge large enough to cover
+transaction costs. The results were communicated through an interactive
+dashboard and a decision-oriented narrative, together with an analysis of
+ethics, compliance with the Brazilian data protection law (LGPD) and
+limitations.
+
+\vspace{\onelineskip}
+\noindent\textbf{Keywords}: market microstructure; Bitcoin; data quality; ETL;
+walk-forward validation.
+\end{otherlanguage*}
+\end{resumo}
+
+% ---------------------------------------------------------------------------------
+% Listas
+% ---------------------------------------------------------------------------------
+\pdfbookmark[0]{\listfigurename}{lof}
+\listoffigures*
+\cleardoublepage
+
+\pdfbookmark[0]{\listofquadrosname}{loq}
+\listofquadros*
+\cleardoublepage
+
+\pdfbookmark[0]{\listtablename}{lot}
+\listoftables*
+\cleardoublepage
+
+\begin{siglas}
+  \item[ABNT] Associação Brasileira de Normas Técnicas
+  \item[API] \textit{Application Programming Interface} (interface de programação)
+  \item[AUC] \textit{Area Under the Curve} (área sob a curva ROC)
+  \item[BRT] Horário de Brasília (UTC$-3$)
+  \item[BTC] Bitcoin
+  \item[CP] \textit{Checkpoint} (entrega parcial da A3)
+  \item[CV] Coeficiente de variação
+  \item[EDA] \textit{Exploratory Data Analysis} (análise exploratória de dados)
+  \item[ETH] Ether (criptoativo da rede Ethereum)
+  \item[ETL] \textit{Extract, Transform, Load} (extração, transformação e carga)
+  \item[GIGO] \textit{Garbage In, Garbage Out}
+  \item[HGB] \textit{HistGradientBoosting} (árvores de decisão com \textit{boosting} por histogramas)
+  \item[IQR] \textit{Interquartile Range} (amplitude interquartil)
+  \item[KPI] \textit{Key Performance Indicator} (indicador-chave)
+  \item[KYC] \textit{Know Your Customer} (identificação de clientes)
+  \item[LGPD] Lei Geral de Proteção de Dados Pessoais
+  \item[MAE] \textit{Mean Absolute Error} (erro absoluto médio)
+  \item[OFI] \textit{Order Flow Imbalance} (desequilíbrio do fluxo de ordens)
+  \item[OHLCV] Abertura, máxima, mínima, fechamento e volume (\textit{open, high, low, close, volume})
+  \item[RA] Registro acadêmico
+  \item[RAM] \textit{Random Access Memory} (memória de acesso aleatório)
+  \item[RMSE] \textit{Root Mean Squared Error} (raiz do erro quadrático médio)
+  \item[ROC] \textit{Receiver Operating Characteristic}
+  \item[SHA-256] \textit{Secure Hash Algorithm} de 256 bits
+  \item[TWAP] \textit{Time-Weighted Average Price} (preço médio ponderado pelo tempo)
+  \item[USDT] Tether, \textit{stablecoin} pareada ao dólar americano
+  \item[UTC] Tempo Universal Coordenado
+  \item[VWAP] \textit{Volume-Weighted Average Price} (preço médio ponderado pelo volume)
+\end{siglas}
+
+\begin{simbolos}
+  \item[$t$] Índice de um intervalo de tempo (barra de 1 minuto ou de 1 segundo)
+  \item[$O_t, H_t, L_t, C_t$] Preços de abertura, máxima, mínima e fechamento da barra $t$
+  \item[$p_i, q_i$] Preço (USDT) e quantidade (BTC) do negócio $i$
+  \item[$V_t^{c}, V_t^{v}$] Volume comprador e volume vendedor agressor da barra $t$ (BTC)
+  \item[$r_t$] Retorno logarítmico da barra $t$
+  \item[$\mathrm{OFI}_t$] Desequilíbrio do fluxo agressor da barra $t$
+  \item[$\mathrm{bps}$] Ponto-base, igual a $0,01\,\%$ ou $10^{-4}$
+  \item[$\sigma$] Desvio-padrão
+  \item[$\rho$] Coeficiente de correlação de postos de Spearman
+  \item[$R^2$] Coeficiente de determinação fora da amostra
+  \item[$\alpha$] Intensidade da regularização L2 do modelo Ridge
+\end{simbolos}
+
+\pdfbookmark[0]{\contentsname}{toc}
+\tableofcontents*
+\cleardoublepage
+
+% ---------------------------------------------------------------------------------
+% ELEMENTOS TEXTUAIS
+% ---------------------------------------------------------------------------------
+\textual
+\pagestyle{abntchapfirst} % apenas o número da página no canto superior direito (NBR 14724)
+
+\input{capitulos/01_introducao}
+\input{capitulos/02_fundamentacao}
+\input{capitulos/03_base_dados}
+\input{capitulos/04_arquitetura}
+\input{capitulos/05_etl}
+\input{capitulos/06_eda}
+\input{capitulos/07_modelagem}
+\input{capitulos/08_dashboard}
+\input{capitulos/09_storytelling}
+\input{capitulos/10_etica}
+\input{capitulos/11_reprodutibilidade}
+\input{capitulos/12_consideracoes}
+
+% ---------------------------------------------------------------------------------
+% ELEMENTOS PÓS-TEXTUAIS
+% ---------------------------------------------------------------------------------
+\postextual
+
+\bibliography{referencias}
+
+\begin{apendicesenv}
+\input{capitulos/apendices}
+\end{apendicesenv}
+
+\end{document}

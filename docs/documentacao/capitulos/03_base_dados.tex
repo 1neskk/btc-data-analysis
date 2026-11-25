@@ -1,0 +1,118 @@
+% =============================================================================
+\chapter{Base de dados}\label{cap:base}
+% =============================================================================
+
+\section{Fonte, versão e integridade}\label{sec:fonte}
+
+A base utilizada é o conjunto \textit{Bitcoin (BTC/USDT) Tick-Level Trade Data
+-- Free Sample}, publicado no Hugging Face pelo fornecedor The Glitch List
+\cite{glitchlist2026}. Ela contém os negócios públicos do mercado à vista de
+BTC/USDT da Binance. O \autoref{qua:ficha} resume as características da base.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:ficha}Ficha técnica da base de dados}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.4cm}|Y|}
+\hline
+\textbf{Item} & \textbf{Valor} \\ \hline
+Nome & Bitcoin (BTC/USDT) Tick-Level Trade Data -- Free Sample \\ \hline
+Endereço & \url{https://huggingface.co/datasets/jalvart/bitcoin-tick-level-trade-data-free-sample} \\ \hline
+Arquivo & \code{data/sample_BTC_2025-02-19_to_2025-02-26.parquet} (Apache Parquet, compressão ZSTD, 103,4 MB, 29 \textit{row groups}) \\ \hline
+Versão fixada & \textit{Commit} \code{c90f6087f5975daec7fe80e6ed110dd19108bd5c} \\ \hline
+SHA-256 esperado & \code{2a6602489e57e8fcde945e082eba0a60ea95484ee8cfe3333ea1fe166d44070a} \\ \hline
+Origem primária & Negócios públicos da Binance (\textit{spot}), coletados e publicados pelo fornecedor The Glitch List \\ \hline
+Dimensão & 27.925.338 registros $\times$ 9 colunas \\ \hline
+Período efetivo & 19/02/2025 00:00:00,219 a 25/02/2025 23:59:59,694 (UTC) \\ \hline
+Licença & Uso pessoal e acadêmico; redistribuição proibida. O repositório não inclui os dados: o código baixa o arquivo da fonte e confere o resumo criptográfico. \\ \hline
+Validação & Reconciliação minuto a minuto com os candles oficiais da Binance \cite{binance2025}: 10.080 de 10.080 minutos idênticos (\autoref{sec:validacaocruzada}) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+O USDT é uma \textit{stablecoin} pareada ao dólar americano (1~USDT
+$\approx$ \usd~1). Por isso, neste trabalho, valores em USDT são lidos como
+dólares.
+
+\section{Aderência aos requisitos da A3}\label{sec:aderencia}
+
+As diretrizes da A3 exigem uma base real e pública com pelo menos 1.000
+registros, de 8 a 10 colunas de tipos variados e com oportunidades reais de
+limpeza \cite{usjt2026}. O \autoref{qua:requisitosbase} mostra que a base
+escolhida atende a todos os requisitos.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:requisitosbase}Aderência da base aos requisitos da A3}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{4.6cm}|C{1.6cm}|Y|}
+\hline
+\textbf{Requisito} & \textbf{Atende?} & \textbf{Evidência} \\ \hline
+Base real e pública & Sim & Hugging Face, acesso aberto, sem cadastro prévio \\ \hline
+Mínimo de 1.000 registros & Sim & 27.925.338 registros \\ \hline
+De 8 a 10 colunas & Sim & 9 colunas \\ \hline
+Tipos de dados variados & Sim & Numéricos (\code{price}, \code{quantity}, \code{trade_id}), categóricos (\code{exchange}, \code{symbol}, \code{aggressor_side}, \code{raw_side}) e temporais (\code{exchange_ts}, \code{ingest_ts}) \\ \hline
+Oportunidades reais de limpeza (GIGO) & Sim & Carimbo de ingestão inválido, tipos inadequados, colunas constantes e redundantes, duplicatas aparentes, metadado inconsistente, unidades de tempo divergentes entre fontes e nulos estruturais na reamostragem (\autoref{cap:etl}) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\section{Dicionário de dados original}\label{sec:dicionario}
+
+O \autoref{qua:dicionario} descreve as nove colunas do arquivo bruto, os valores
+observados e o tratamento aplicado a cada uma no ETL.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:dicionario}Dicionário de dados da base bruta}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{2.3cm}|L{2.2cm}|Y|L{3.4cm}|L{3.1cm}|}
+\hline
+\textbf{Coluna} & \textbf{Tipo no arquivo / lógico} & \textbf{Descrição} & \textbf{Valores observados} & \textbf{Problema e tratamento} \\ \hline
+\code{exchange} & dicionário de texto / categórico nominal & Corretora em que o negócio ocorreu & \code{binance} (único valor) & Constante: vira metadado e sai da tabela \\ \hline
+\code{symbol} & dicionário de texto / categórico nominal & Par negociado & \code{BTCUSDT} (único valor) & Constante: vira metadado e sai da tabela \\ \hline
+\code{trade_id} & texto / identificador inteiro & Identificador sequencial do negócio atribuído pela Binance & 4.570.646.084 a 4.598.571.421; único e contíguo & Texto convertido para inteiro de 64 bits \\ \hline
+\code{exchange_ts} & inteiro (ms desde 1970) / temporal & Instante da execução na corretora (UTC) & 19/02/2025 00:00:00,219 a 25/02/2025 23:59:59,694 & Convertido para data-hora UTC (\code{ts}) \\ \hline
+\code{ingest_ts} & inteiro (ms desde 1970) / temporal & Instante em que o fornecedor gravou o registro & 7 valores, de 05/04/2032 a 09/01/2037 & Datas futuras: convertidas em nulo; coluna descartada \\ \hline
+\code{price} & real / numérico contínuo & Preço de execução em USDT por 1~BTC & 86.050,99 a 99.475,00 (passo de 0,01) & Sem problema \\ \hline
+\code{quantity} & real / numérico contínuo & Quantidade negociada em BTC & 0,00001 a 56,34875 (passo de 0,00001) & Cauda pesada: mantida e analisada em escala logarítmica \\ \hline
+\code{aggressor_side} & inteiro de 8 bits / categórico binário & Lado do agressor: $+1$ compra, $-1$ venda & $-1$: 14.471.136; $+1$: 13.454.202 & Convertido na coluna categórica \code{side} \\ \hline
+\code{raw_side} & texto / categórico binário & Mesmo lado do agressor, em texto & \code{sell}, \code{buy} & Redundante: descartada \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\section{Variáveis derivadas}\label{sec:derivadas}
+
+O ETL cria novas variáveis em três níveis de granularidade: o negócio
+individual, a barra de tempo (1 minuto ou 1 segundo) e a ordem agressora
+reconstruída. O \autoref{qua:derivadas} lista as principais; as fórmulas de OFI,
+retorno e amplitude foram apresentadas nas equações \eqref{eq:ofi} a
+\eqref{eq:amplitude}. O dicionário completo dos arquivos gerados está no
+\autoref{apendice:dicionario}.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:derivadas}Principais variáveis derivadas no ETL}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{2.9cm}|L{2.4cm}|Y|}
+\hline
+\textbf{Variável} & \textbf{Nível} & \textbf{Definição} \\ \hline
+\code{ts} & negócio & \code{exchange_ts} convertido para data-hora UTC \\ \hline
+\code{side} & negócio & \code{buy} ou \code{sell} (categórica), a partir de \code{aggressor_side} \\ \hline
+\code{notional_usd} & negócio & $p_i \times q_i$: valor financeiro do negócio em dólares \\ \hline
+\code{size_bucket} & negócio e ordem & Faixa de valor: $<$ \usd~100; \usd~100 a 1 mil; \usd~1 mil a 10 mil; \usd~10 mil a 100 mil; $\geq$ \usd~100 mil \\ \hline
+\code{open}, \code{high}, \code{low}, \code{close} & barra & Primeiro, máximo, mínimo e último preço do intervalo \\ \hline
+\code{volume_btc}, \code{volume_usd} & barra & Soma de \code{quantity} e de \code{notional_usd} \\ \hline
+\code{n_trades} & barra & Número de negócios no intervalo \\ \hline
+\code{buy_volume_btc} & barra & Volume em que o agressor foi comprador ($V_t^{c}$) \\ \hline
+\code{vwap} & barra & Preço médio ponderado pelo volume, $\sum p_i q_i / \sum q_i$ \\ \hline
+\code{ofi} & barra & Desequilíbrio do fluxo agressor, \autoref{eq:ofi} \\ \hline
+\code{log_return}, \code{abs_return_bps} & barra & Retorno logarítmico e seu valor absoluto em bps, \autoref{eq:retorno} \\ \hline
+\code{range_bps} & barra & Amplitude da barra em bps, \autoref{eq:amplitude} \\ \hline
+\code{has_trades} & barra de 1 s & Indica se houve ao menos um negócio no segundo \\ \hline
+\code{n_fills} & ordem agressora & Número de execuções parciais agrupadas na mesma ordem \\ \hline
+\code{book_walk_bps} & ordem agressora & Quanto a ordem andou no livro: $10^4\,|p_{\text{último}}/p_{\text{primeiro}} - 1|$ \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}

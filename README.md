@@ -10,7 +10,7 @@ Analisamos **27,9 milhões de negócios** de BTC/USDT na Binance entre 19 e 25/0
 |---|---|---|
 | 1 — Diagnóstico & Escopo | ✅ | [`CHECKPOINT_1.md`](CHECKPOINT_1.md): grupo, cenário, base, dicionário de dados, 3 perguntas de negócio |
 | 2 — Auditoria & ETL | ✅ | [`notebooks/A3_CP2_auditoria_etl_eda.ipynb`](notebooks/A3_CP2_auditoria_etl_eda.ipynb): auditoria, limpeza, validação cruzada, EDA inicial |
-| 3 — Entrega final & Defesa | ⏳ | código consolidado (`src/`), modelagem & storytelling (`notebooks/A3_CP3_modelagem_storytelling.ipynb`), dashboard (`app/dashboard.py`), ética/LGPD (`ETHICS_LGPD.md`); slides pendentes |
+| 3 — Entrega final & Defesa | ⏳ | código consolidado (`src/`), modelagem & storytelling (`notebooks/A3_CP3_modelagem_storytelling.ipynb`), dashboard (`app/dashboard.py`), ética/LGPD (`ETHICS_LGPD.md`), documentação técnica em PDF no padrão ABNT ([`docs/documentacao_projeto_A3.pdf`](docs/documentacao_projeto_A3.pdf)); slides pendentes |
 
 ## Base de dados
 
@@ -70,6 +70,9 @@ streamlit run app/dashboard.py
 │   └── dashboard.py                         # Dashboard interativo (Streamlit + Plotly)
 ├── tests/
 │   └── test_etl_and_modeling.py             # Testes unitários e de ausência de look-ahead
+├── docs/
+│   ├── documentacao_projeto_A3.pdf          # Documentação técnica completa (ABNT)
+│   └── documentacao/                        # Fonte LaTeX (abnTeX2), figuras e referências
 ├── notebooks/
 │   ├── A3_CP2_auditoria_etl_eda.ipynb       # Auditoria, ETL e EDA (executado, com saídas)
 │   └── A3_CP3_modelagem_storytelling.ipynb  # Modelagem preditiva (1min/1s) e Storytelling

@@ -1,0 +1,120 @@
+% =============================================================================
+\chapter{Fundamentação teórica}\label{cap:fundamentacao}
+% =============================================================================
+
+Este capítulo resume os conceitos usados ao longo do projeto. A intenção não é
+esgotar os temas, mas deixar claras as definições e as premissas adotadas nas
+análises dos capítulos seguintes.
+
+\section{Microestrutura de mercado e dados de \textit{tick}}\label{sec:microestrutura}
+
+Em uma corretora centralizada, as ordens limitadas que aguardam execução formam
+o \textbf{livro de ofertas}. Quem deixa uma ordem no livro é o participante
+\textbf{passivo}; quem envia uma ordem que cruza com o livro, por exemplo uma
+compra a mercado, é o participante \textbf{agressor}. Cada casamento entre a
+ordem agressora e uma ordem passiva gera um negócio separado, com identificador
+próprio. Assim, uma única ordem agressora grande pode produzir dezenas de
+negócios no mesmo milissegundo, a preços iguais ou crescentes, à medida que
+consome os níveis do livro. Esse consumo progressivo é chamado aqui de
+\textit{book walk} e é a origem do \textit{slippage} pago por quem executa
+ordens grandes de uma só vez.
+
+Uma base de \textit{tick} registra cada um desses negócios com preço,
+quantidade, instante e lado do agressor. A partir dela é possível reconstruir
+barras de qualquer frequência e medir liquidez, volatilidade e pressão
+direcional com granularidade muito maior que a dos candles diários.
+
+\section{Qualidade de dados e o princípio GIGO}\label{sec:qualidade}
+
+O princípio \textit{Garbage In, Garbage Out} afirma que nenhuma análise é
+melhor que os dados que a alimentam. \citeonline{wang1996} mostram que
+qualidade de dados é multidimensional e depende do uso pretendido. O projeto
+adota cinco dimensões clássicas para auditar a base bruta:
+
+\begin{alineas}
+  \item \textbf{completude}: falta algum valor ou algum registro?
+  \item \textbf{unicidade}: há registros repetidos?
+  \item \textbf{validade}: os valores respeitam tipo, domínio e regras de negócio?
+  \item \textbf{consistência}: as colunas concordam entre si e com os metadados?
+  \item \textbf{exatidão}: há valores extremos e, se houver, são erro ou realidade?
+\end{alineas}
+
+\section{Desequilíbrio do fluxo de ordens (OFI)}\label{sec:ofi}
+
+\citeonline{cont2014} mostram que, em horizontes curtos, a variação de preço é
+explicada principalmente pelo desequilíbrio entre a pressão compradora e a
+vendedora no topo do livro, que os autores chamam de \textit{Order Flow
+Imbalance} (OFI). Como a base disponível contém apenas negócios executados, e
+não as cotações do livro, o projeto usa uma adaptação baseada no volume
+agressor, normalizada entre $-1$ e $+1$:
+
+\begin{equation}\label{eq:ofi}
+  \mathrm{OFI}_t = \frac{V_t^{c} - V_t^{v}}{V_t^{c} + V_t^{v}},
+\end{equation}
+
+\noindent em que $V_t^{c}$ e $V_t^{v}$ são, respectivamente, os volumes em BTC
+negociados por agressores compradores e vendedores na barra $t$. O indicador
+vale $+1$ quando todos os agressores compraram, $-1$ quando todos venderam e
+$0$ quando há equilíbrio ou nenhum negócio.
+
+\section{Retornos, volatilidade realizada e caudas pesadas}\label{sec:volatilidade}
+
+O retorno de cada barra é medido em escala logarítmica, a partir do preço de
+fechamento $C_t$, e expresso em pontos-base (bps), em que 1~bps $= 0,01\,\%$:
+
+\begin{equation}\label{eq:retorno}
+  r_t = \ln\!\left(\frac{C_t}{C_{t-1}}\right), \qquad
+  |r_t|_{\mathrm{bps}} = 10^4\,|r_t|.
+\end{equation}
+
+A amplitude da barra, usada como medida de volatilidade intrabarra, é
+
+\begin{equation}\label{eq:amplitude}
+  \mathrm{amplitude}_t = 10^4\left(\frac{H_t}{L_t} - 1\right)\ \text{bps},
+\end{equation}
+
+\noindent e a volatilidade realizada diária, seguindo \citeonline{andersen2003},
+é a raiz da soma dos quadrados dos retornos de 1 minuto do dia $d$:
+
+\begin{equation}\label{eq:volrealizada}
+  \mathrm{VR}_d = \sqrt{\sum_{t \in d} r_t^{2}}.
+\end{equation}
+
+Retornos financeiros têm caudas mais pesadas que a distribuição normal
+\cite{cont2001}: movimentos extremos são muito mais frequentes do que a curva
+gaussiana prevê. Por isso, o projeto privilegia medianas, escalas logarítmicas e
+correlações de postos (Spearman) sempre que a cauda distorce a média.
+
+\section{Eficiência de mercado e \textit{bid-ask bounce}}\label{sec:eficiencia}
+
+Na forma fraca da hipótese de mercados eficientes \cite{fama1970}, os preços já
+incorporam a informação contida no histórico de preços e volumes, de modo que
+não deveria ser possível obter lucro sistemático apenas com esse histórico.
+Em escalas muito curtas, porém, surge uma previsibilidade mecânica: o preço do
+último negócio oscila entre a melhor oferta de compra e a melhor oferta de venda
+conforme o lado do agressor, o que produz autocorrelação negativa entre retornos
+consecutivos. \citeonline{roll1984} formalizou esse efeito, conhecido como
+\textit{bid-ask bounce}. Ele pode gerar acurácia estatística elevada sem gerar
+lucro, porque a amplitude do movimento é da ordem de um \textit{tick} e fica
+abaixo dos custos de transação.
+
+\section{Validação temporal \textit{walk-forward}}\label{sec:walkforward}
+
+Em séries temporais, embaralhar observações entre treino e teste vaza
+informação do futuro para o passado e superestima o desempenho. A alternativa é
+a validação por origem móvel \cite{hyndman2021}, também chamada de
+\textit{walk-forward}: treina-se o modelo com os dados até um instante e
+avalia-se no período imediatamente seguinte; em seguida, a origem avança e o
+processo se repete. No projeto, cada dobra de teste corresponde a um dia
+completo, e o treino usa todos os dias anteriores (janela expansiva).
+
+\section{Execução algorítmica: TWAP e VWAP}\label{sec:twap}
+
+Para reduzir o impacto de mercado, ordens grandes costumam ser fatiadas ao
+longo do tempo. As estratégias mais simples são o TWAP, que divide a ordem em
+partes iguais distribuídas uniformemente no tempo, e o VWAP, que distribui as
+partes proporcionalmente ao volume esperado em cada intervalo.
+\citeonline{almgren2001} mostram que a execução ótima equilibra dois custos: o
+impacto de executar depressa e o risco de preço de executar devagar. Esse
+equilíbrio é exatamente o \textit{trade-off} entre liquidez e volatilidade
+investigado na pergunta P1.

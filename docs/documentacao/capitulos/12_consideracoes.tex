@@ -1,0 +1,57 @@
+% =============================================================================
+\chapter{Considerações finais}\label{cap:consideracoes}
+% =============================================================================
+
+O Projeto Analítico A3 transformou uma base pública de 27,9 milhões de negócios
+de BTC/USDT em evidências para as decisões de uma mesa de execução de
+criptoativos, cobrindo todas as etapas previstas nas diretrizes da disciplina:
+diagnóstico, ETL com auditoria de qualidade, análise exploratória, modelagem
+preditiva, visualização e reflexão ética.
+
+A primeira contribuição do trabalho está na qualidade dos dados. Uma base que
+parecia limpa, sem nenhum nulo, escondia um carimbo de ingestão 100\,\% inválido
+e 41,7\,\% de duplicatas aparentes que, se removidas por um procedimento
+ingênuo, teriam destruído quase metade dos negócios. A reconciliação minuto a
+minuto com a fonte oficial, com concordância total nos 10.080 minutos, deu
+segurança para todas as análises seguintes e é a melhor ilustração do princípio
+\textit{Garbage In, Garbage Out} no projeto.
+
+As três perguntas de negócio foram respondidas com números. Na P1, a liquidez se
+concentra entre 14h e 16h~UTC, com pico 4,2 vezes maior que o vale, mas acompanhada
+de volatilidade mais alta, o que recomenda execução fatiada nessa janela. Na P2,
+os dias de estresse multiplicam o volume por 2,7 e a volatilidade por 2,0, e o
+valor negociado é dominado por poucos negócios grandes, o que exige limites de
+risco dinâmicos e folga de capacidade. Na P3, o desequilíbrio do fluxo explica o
+preço do mesmo minuto, mas não o do minuto seguinte.
+
+A modelagem preditiva confirmou e refinou essas conclusões. A volatilidade do
+intervalo seguinte é previsível fora da amostra, e a regressão Ridge superou
+tanto os \textit{baselines} quanto os modelos de árvore. A direção do preço, por
+outro lado, não oferece ganho que cubra os custos de transação, nem mesmo na
+escala de 1 segundo, em que a alta acurácia apenas reflete o \textit{bid-ask
+bounce}. Para a mesa, o valor prático está na gestão de risco e no ritmo de
+execução, e não em apostas direcionais.
+
+As conclusões devem ser lidas à luz das limitações discutidas no
+\autoref{cap:etica}: uma única semana, atípica, de uma única corretora e de um
+único par. Como trabalhos futuros, recomenda-se:
+
+\begin{alineas}
+  \item repetir as análises em mais semanas, incluindo períodos calmos e de alta,
+        e em outras corretoras e pares, para validar a estabilidade dos padrões
+        horários e de estresse;
+  \item incorporar dados do livro de ofertas, para medir o \textit{spread}
+        cotado, a profundidade e o OFI na forma original de
+        \citeonline{cont2014};
+  \item comparar a previsão de volatilidade com modelos econométricos clássicos
+        de volatilidade realizada e avaliar seu uso em uma simulação de execução
+        TWAP e VWAP com custos;
+  \item evoluir o pipeline para processamento contínuo, com o mesmo contrato de
+        qualidade aplicado a cada novo lote de dados.
+\end{alineas}
+
+No momento desta documentação, as pendências do projeto, registradas em
+\code{TODO.md}, são a elaboração dos \textit{slides} da defesa final, a
+atualização da tabela de entregas no \code{README.md} e uma revisão de
+reprodutibilidade de ponta a ponta dos notebooks, do código consolidado e do
+painel antes da entrega.

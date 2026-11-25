@@ -1,0 +1,152 @@
+% =============================================================================
+\chapter{Introdução}\label{cap:introducao}
+% =============================================================================
+
+O Projeto Analítico A3 é a avaliação prática e continuada da unidade curricular
+Análise de Dados e Big Data. Segundo as diretrizes da disciplina
+\cite{usjt2026}, cada grupo deve diagnosticar um problema real, coletar e
+sanitizar uma base de dados pública por meio de um processo de extração,
+transformação e carga (ETL), realizar análises exploratórias e preditivas e
+comunicar os resultados por meio de \textit{Data Storytelling} e visualização,
+respeitando a ética e a Lei Geral de Proteção de Dados Pessoais (LGPD).
+
+Este documento consolida, em um único volume, tudo o que o grupo produziu nos
+três \textit{checkpoints} da A3: o diagnóstico e o escopo, a auditoria de
+qualidade e o ETL, a análise exploratória, a modelagem preditiva, o painel
+interativo, a narrativa executiva, a reflexão ética e as instruções de
+reprodução. Ele foi escrito a partir do estado do repositório do projeto na
+revisão \code{9aaf3fb} (novembro de 2026) e das saídas registradas nos
+notebooks executados.
+
+\section{Contexto e cenário}\label{sec:contexto}
+
+O grupo assume o papel do time de dados de uma \textbf{mesa de execução de
+criptoativos}, área que recebe ordens grandes de clientes institucionais
+(fundos, tesourarias de empresas e \textit{family offices}) e precisa
+executá-las no mercado à vista de BTC/USDT da Binance, a corretora de maior
+liquidez do mundo. Executar mal custa caro: uma ordem grande colocada no
+momento errado consome vários níveis de preço do livro de ofertas, paga
+\textit{slippage} (diferença entre o preço esperado e o efetivamente obtido) e
+fica exposta a movimentos bruscos.
+
+O período escolhido, de 19 a 25 de fevereiro de 2025, foi uma semana de forte
+estresse. Em 21 de fevereiro a corretora Bybit sofreu o maior roubo de
+criptoativos já registrado, de aproximadamente \usd~1,5 bilhão em ether (ETH),
+atribuído pelo FBI a agentes norte-coreanos \cite{fbi2025}. Nos dias seguintes,
+o bitcoin, que havia tocado \usd~99.475 em 21 de fevereiro, caiu até
+\usd~86.051 em 25 de fevereiro, uma queda de 13,5\,\%. Somente em 25 de
+fevereiro ocorreram 10,3 milhões de negócios, 37\,\% de toda a semana.
+
+\section{Problema e objetivos}\label{sec:objetivos}
+
+A mesa precisa de evidências, e não de intuição, para decidir \textbf{quando}
+e \textbf{como} executar ordens e para \textbf{calibrar seus controles de risco}
+em dias de estresse. Dados de \textit{tick}, isto é, cada negócio individual com
+precisão de milissegundo, permitem medir liquidez, volatilidade e pressão
+compradora ou vendedora em uma granularidade que os candles diários escondem.
+
+O \textbf{objetivo geral} do projeto é transformar uma base pública de
+27,9 milhões de negócios em evidências confiáveis para as decisões de uma mesa
+de execução. Os \textbf{objetivos específicos} são:
+
+\begin{alineas}
+  \item auditar a qualidade da base bruta e documentar cada problema encontrado,
+        aplicando o princípio \textit{Garbage In, Garbage Out} (GIGO);
+  \item construir um pipeline de ETL reprodutível, com verificação de
+        integridade, contrato de qualidade e validação cruzada contra a fonte
+        primária;
+  \item responder, com métricas e agrupamentos, a três perguntas de negócio
+        sobre liquidez, estresse e fluxo de ordens;
+  \item avaliar, sem vazamento de informação futura, se é possível prever a
+        volatilidade e a direção do preço no intervalo seguinte;
+  \item comunicar os achados em um painel interativo e em uma narrativa
+        orientada à decisão;
+  \item analisar criticamente a ética, a conformidade com a LGPD, a licença da
+        fonte e as limitações do estudo.
+\end{alineas}
+
+\section{Perguntas de negócio}\label{sec:perguntas}
+
+O \autoref{qua:perguntas} apresenta as três perguntas de negócio definidas no
+\textit{Checkpoint}~1, com a decisão que cada uma apoia, as métricas usadas e a
+hipótese inicial do grupo.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:perguntas}Perguntas de negócio, decisões apoiadas e hipóteses}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|C{0.6cm}|Y|L{3.3cm}|L{3.6cm}|L{3.2cm}|}
+\hline
+\textbf{Id} & \textbf{Pergunta} & \textbf{Decisão apoiada} & \textbf{Métricas} & \textbf{Hipótese} \\ \hline
+P1 & Em quais horários do dia (UTC) o BTC/USDT concentra maior volume e número
+de negócios, e como a volatilidade acompanha essa liquidez? &
+Janela em que a mesa deve executar ou fatiar ordens grandes para reduzir o
+impacto de preço. &
+Volume em dólares e número de negócios por minuto (média e mediana por hora);
+retorno absoluto e amplitude por hora; mapa de calor dia $\times$ hora. &
+A liquidez se concentra na abertura do mercado americano, mas a volatilidade
+também, o que cria um \textit{trade-off}. \\ \hline
+P2 & Como volume, volatilidade e perfil de tamanho dos negócios mudaram nos
+dias de estresse em relação aos dias calmos? Quem concentra o volume? &
+Calibração de limites de risco e alertas; dimensionamento da capacidade
+operacional. &
+Amplitude diária, volatilidade realizada, volume, número de negócios;
+participação de cada faixa de tamanho (\code{groupby}). &
+Em estresse o volume se multiplica e poucos negócios grandes concentram a
+maior parte do valor. \\ \hline
+P3 & O desequilíbrio entre compras e vendas agressoras (OFI) está associado ao
+retorno do mesmo minuto? Ele antecipa o retorno do minuto seguinte? &
+Viabilidade de um sinal ou modelo preditivo de curto prazo. &
+OFI por minuto; correlações de Pearson e Spearman com defasagens de 0 a 10
+minutos; saldo comprador diário. &
+Forte associação no mesmo minuto, mas pouco ou nenhum poder preditivo
+(eficiência de mercado). \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\section{Equipe e cronograma de entregas}\label{sec:equipe}
+
+O grupo é formado por dois integrantes, dentro do limite de dois a três alunos
+estabelecido pelas diretrizes da A3: Gabriel Almeida Portela (RA 825233281) e
+Daniel Almeida Portela (RA 825234443). A A3 vale 40 pontos e é entregue em três
+\textit{checkpoints}, resumidos no \autoref{qua:checkpoints} com a situação de
+cada entrega no momento desta documentação.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:checkpoints}Cronograma de entregas da A3 e situação do projeto}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.0cm}|C{1.5cm}|C{1.3cm}|Y|L{2.6cm}|}
+\hline
+\textbf{\textit{Checkpoint}} & \textbf{Prazo} & \textbf{Valor} & \textbf{Entregáveis do projeto} & \textbf{Situação} \\ \hline
+1 -- Diagnóstico e escopo & Semana 5 & 5,0 pts &
+\code{CHECKPOINT_1.md}: grupo, cenário, base, dicionário de dados e três
+perguntas de negócio. & Concluído \\ \hline
+2 -- Auditoria e ETL & Semana 10 & 15,0 pts &
+\code{notebooks/A3_CP2_auditoria_etl_eda.ipynb}: auditoria, limpeza, validação
+cruzada, carga e EDA inicial. & Concluído \\ \hline
+3 -- Entrega final e defesa & Semana 18 & 20,0 pts &
+Código consolidado (\code{src/}), notebook de modelagem e
+\textit{storytelling}, painel interativo (\code{app/}), análise de ética e LGPD
+e esta documentação. & Concluído, exceto os \textit{slides} da defesa \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonte{Elaborado pelos autores (2026), com base em \citeonline{usjt2026}.}
+\end{quadro}
+
+\section{Organização do documento}\label{sec:organizacao}
+
+O \autoref{cap:fundamentacao} apresenta os conceitos de microestrutura de
+mercado, qualidade de dados e validação temporal que sustentam o trabalho. O
+\autoref{cap:base} descreve a base de dados e o dicionário de dados. O
+\autoref{cap:arquitetura} mostra a arquitetura da solução e a organização do
+código. O \autoref{cap:etl} detalha a auditoria de qualidade e o ETL. O
+\autoref{cap:eda} reúne a análise exploratória e as respostas às perguntas de
+negócio. O \autoref{cap:modelagem} trata da modelagem preditiva. O
+\autoref{cap:dashboard} documenta o painel interativo e o
+\autoref{cap:storytelling}, a narrativa executiva. O \autoref{cap:etica}
+discute ética, LGPD e limitações; o \autoref{cap:reprodutibilidade}, testes e
+reprodutibilidade; e o \autoref{cap:consideracoes} apresenta as considerações
+finais. Os apêndices trazem a matriz de atendimento aos requisitos da A3, o
+dicionário dos produtos analíticos e a lista completa de atributos dos
+modelos.

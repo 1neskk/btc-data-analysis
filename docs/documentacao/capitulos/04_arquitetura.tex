@@ -1,0 +1,208 @@
+% =============================================================================
+\chapter{Arquitetura da solução}\label{cap:arquitetura}
+% =============================================================================
+
+\section{Visão geral do pipeline}\label{sec:pipeline}
+
+A \autoref{fig:pipeline} mostra o fluxo completo de dados do projeto. O arquivo
+bruto é baixado da fonte secundária e conferido por SHA-256; em seguida passa
+por auditoria, transformação e validação cruzada contra a fonte primária
+(Binance). O resultado é gravado em quatro arquivos Parquet, que alimentam a
+análise exploratória, a modelagem preditiva e o painel interativo. As etapas da
+extração à carga existem em duas formas equivalentes: comentadas passo a passo
+no notebook do \textit{Checkpoint}~2 e consolidadas na função
+\code{run_etl_pipeline()} do módulo \code{src/etl.py}.
+
+\begin{figure}[htbp]
+\caption{\label{fig:pipeline}Fluxo de dados do projeto, da fonte aos produtos analíticos}
+\begin{center}
+\begin{tikzpicture}[
+  font=\footnotesize,
+  >={Stealth[length=2.2mm]},
+  etapa/.style={rectangle, rounded corners=3pt,
+                draw=azul, fill=azulclaro, line width=0.6pt, text width=3.15cm, align=center,
+                minimum height=1.35cm, inner sep=3pt},
+  externo/.style={etapa, draw=cinza, fill=cinzaclaro, dashed},
+  produto/.style={etapa, draw=laranja, fill=laranjaclaro, text width=4.3cm},
+  seta/.style={->, line width=0.7pt, draw=tinta}
+]
+  % Linha 1
+  \node[externo] (hf)    at (1.7,0)  {\textbf{Hugging Face}\\Parquet bruto\\27,9 mi negócios};
+  \node[etapa]   (ext)   at (5.8,0)  {\textbf{Extração (E)}\\download com\\verificação SHA-256};
+  \node[etapa]   (aud)   at (9.9,0)  {\textbf{Auditoria}\\completude, unicidade,\\validade, consistência,\\exatidão};
+  \node[etapa]   (tra)   at (14.0,0) {\textbf{Transformação (T)}\\tipos, nulos, colunas,\\contrato de qualidade};
+  % Linha 2
+  \node[externo] (bn)    at (9.9,-2.4) {\textbf{Binance Public Data}\\candles oficiais\\de 1 minuto};
+  \node[etapa]   (val)   at (14.0,-2.4) {\textbf{Validação cruzada}\\10.080 minutos\\comparados};
+  % Linha 3
+  \node[etapa, text width=15.1cm, minimum height=1.0cm] (car) at (7.85,-4.6)
+     {\textbf{Carga (L)} em \texttt{data/processed/} (Parquet ZSTD):\quad
+      \texttt{trades\_clean}\ \textperiodcentered\ \texttt{bars\_1min}\ \textperiodcentered\
+      \texttt{bars\_1s}\ \textperiodcentered\ \texttt{taker\_orders}};
+  % Linha 4
+  \node[produto] (eda)   at (2.6,-6.8)  {\textbf{EDA e respostas P1--P3}\\notebook do CP2};
+  \node[produto] (mod)   at (7.85,-6.8) {\textbf{Modelagem \textit{walk-forward}}\\notebook do CP3 e\\\texttt{src/modeling.py}};
+  \node[produto] (dash)  at (13.1,-6.8) {\textbf{Painel interativo}\\Streamlit e Plotly\\\texttt{app/dashboard.py}};
+
+  \draw[seta] (hf) -- (ext);
+  \draw[seta] (ext) -- (aud);
+  \draw[seta] (aud) -- (tra);
+  \draw[seta] (tra) -- (val);
+  \draw[seta] (bn) -- (val);
+  \draw[seta] (val.south) -- (val.south |- car.north);
+  \draw[seta] (eda.north |- car.south) -- (eda.north);
+  \draw[seta] (mod.north |- car.south) -- (mod.north);
+  \draw[seta] (dash.north |- car.south) -- (dash.north);
+\end{tikzpicture}
+\end{center}
+\fonteautores
+\end{figure}
+
+\section{Estrutura do repositório}\label{sec:repositorio}
+
+O código é organizado como um pequeno pacote Python (\code{src/}), consumido
+pelos notebooks, pelo painel e pelos testes. A pasta \code{data/} é gerada
+localmente pelo ETL e \textbf{não é versionada}, em respeito à licença da base.
+A \autoref{fig:arvore} mostra a estrutura de pastas.
+
+\begin{figure}[htbp]
+\caption{\label{fig:arvore}Estrutura de pastas do repositório}
+\begin{minipage}{\textwidth}
+\SingleSpacing\small
+\renewcommand*\DTstylecomment{\rmfamily\color{tinta}}
+\renewcommand*\DTstyle{\ttfamily}
+\dirtree{%
+.1 btc-data-analysis/.
+.2 CHECKPOINT\_1.md\DTcomment{diagnóstico e escopo (CP1)}.
+.2 ETHICS\_LGPD.md\DTcomment{LGPD, licença, vieses e riscos de sinais}.
+.2 STORYTELLING.md\DTcomment{narrativa executiva}.
+.2 README.md, TODO.md, requirements.txt.
+.2 src/\DTcomment{código consolidado e reutilizável}.
+.3 config.py\DTcomment{parâmetros, paleta e caminhos}.
+.3 etl.py\DTcomment{extração, limpeza, validação e agregação}.
+.3 data\_loader.py\DTcomment{leitura dos Parquets e agregações de P1 a P3}.
+.3 modeling.py\DTcomment{atributos causais e validação \textit{walk-forward}}.
+.2 app/dashboard.py\DTcomment{painel interativo (Streamlit e Plotly)}.
+.2 tests/test\_etl\_and\_modeling.py\DTcomment{testes unitários e de ausência de vazamento}.
+.2 notebooks/.
+.3 A3\_CP2\_auditoria\_etl\_eda.ipynb\DTcomment{auditoria, ETL e EDA}.
+.3 A3\_CP3\_modelagem\_storytelling.ipynb\DTcomment{modelagem e \textit{storytelling}}.
+.2 docs/documentacao/\DTcomment{fonte \LaTeX{} desta documentação}.
+.2 data/\DTcomment{gerada localmente; não versionada}.
+.3 raw/\DTcomment{Parquet original (SHA-256 conferido)}.
+.3 external/\DTcomment{candles oficiais da Binance}.
+.3 processed/\DTcomment{produtos do ETL em Parquet}.
+}
+\end{minipage}
+\fonteautores
+\end{figure}
+
+\section{Módulos do pacote \texttt{src}}\label{sec:modulos}
+
+O pacote \code{src/} reúne as funções que, no \textit{Checkpoint}~2, estavam
+escritas diretamente no notebook. Consolidá-las em módulos permite reutilizar o
+mesmo código no notebook de modelagem, no painel e nos testes automatizados,
+garantindo que todos trabalhem sobre as mesmas regras. Os
+quadros~\ref{qua:modulos1} e~\ref{qua:modulos2} descrevem a interface pública de
+cada módulo.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:modulos1}Interface dos módulos \texttt{config.py} e \texttt{etl.py}}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{1.9cm}|L{4.6cm}|Y|}
+\hline
+\textbf{Módulo} & \textbf{Elemento} & \textbf{Responsabilidade} \\ \hline
+\multirow{6}{=}{\code{config.py}}
+ & \code{HF_REPO}, \code{HF_REVISION}, \code{DATA_URL}, \code{EXPECTED_SHA256} & Identificam a versão exata da base e o resumo criptográfico esperado \\ \cline{2-3}
+ & \code{PERIOD_START}, \code{PERIOD_END_DECLARED}, \code{DATASET_PUBLISHED_AT} & Período analisado e data de publicação usada para validar \code{ingest_ts} \\ \cline{2-3}
+ & \code{STRESS_RANGE_THRESHOLD} $= 0,04$ & Regra objetiva de dia de estresse: amplitude intradiária acima de 4\,\% \\ \cline{2-3}
+ & \code{SIZE_BINS}, \code{SIZE_LABELS} & Limites e rótulos das cinco faixas de tamanho \\ \cline{2-3}
+ & \code{PALETTE}, \code{DAY_COLORS} & Paleta de cores compartilhada por notebooks e painel \\ \cline{2-3}
+ & \code{get_project_paths()}, \code{day_label()} & Resolvem as pastas de dados e formatam rótulos de dia em português \\ \hline
+\multirow{9}{=}{\code{etl.py}}
+ & \code{sha256_of()} & Calcula o SHA-256 de um arquivo em blocos de 1 MB \\ \cline{2-3}
+ & \code{download_file()} & Baixa um arquivo (gravação atômica via \code{.part}) e confere o resumo \\ \cline{2-3}
+ & \code{clean_trades()} & Aplica a limpeza do CP2: tipos, \code{ingest_ts}, colunas constantes e redundantes, deduplicação idempotente, \code{notional_usd} e \code{size_bucket} \\ \cline{2-3}
+ & \code{validate_trades()} & Verifica o contrato de qualidade e interrompe a execução se alguma regra falhar \\ \cline{2-3}
+ & \code{build_bars()} & Agrega negócios em barras OHLCV sobre uma grade temporal contínua \\ \cline{2-3}
+ & \code{fill_bar_gaps()} & Preenche intervalos sem negócio sem viés de antecipação \\ \cline{2-3}
+ & \code{add_bar_features()} & Calcula VWAP, OFI, retorno, amplitude e ticket médio \\ \cline{2-3}
+ & \code{build_taker_orders()} & Reconstrói ordens agressoras a partir das execuções parciais \\ \cline{2-3}
+ & \code{run_etl_pipeline()} & Orquestra o ETL completo e grava os Parquets (idempotente) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:modulos2}Interface dos módulos \texttt{data\_loader.py} e \texttt{modeling.py}}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{1.9cm}|L{4.6cm}|Y|}
+\hline
+\textbf{Módulo} & \textbf{Função} & \textbf{Responsabilidade} \\ \hline
+\multirow{7}{=}{\code{data_loader.py}}
+ & \code{load_bars()} & Lê \code{bars_1min} ou \code{bars_1s} e garante índice em UTC \\ \cline{2-3}
+ & \code{load_taker_orders()}, \code{load_trades_clean()} & Leem os demais Parquets, com seleção de colunas para economizar memória \\ \cline{2-3}
+ & \code{compute_daily_summary()} & Resumo diário (OHLC, volume, volatilidade realizada, saldo de fluxo) e classificação do tipo de dia \\ \cline{2-3}
+ & \code{compute_hourly_profile()} & Medianas e médias horárias de liquidez e volatilidade, em UTC ou BRT \\ \cline{2-3}
+ & \code{compute_trade_size_summary()} & Distribuição por dia, hora e faixa de tamanho, com \textit{cache} em Parquet \\ \cline{2-3}
+ & \code{compute_lag_correlations()} & Correlações de Pearson e Spearman entre $\mathrm{OFI}_t$ e $r_{t+k}$ \\ \cline{2-3}
+ & \code{attach_day_type()} & Associa cada registro ao tipo do seu dia \\ \hline
+\multirow{6}{=}{\code{modeling.py}}
+ & \code{build_lagged_features()} & Constrói 50 atributos estritamente causais e os três grupos de ablação \\ \cline{2-3}
+ & \code{build_targets()} & Constrói os alvos do intervalo $t+1$ alinhados ao índice $t$ \\ \cline{2-3}
+ & \code{prepare_modeling_dataset()} & Combina atributos e alvos, removendo só as bordas incompletas \\ \cline{2-3}
+ & \code{daily_walk_forward_folds()} & Gera as dobras \textit{walk-forward} diárias em ordem cronológica \\ \cline{2-3}
+ & \code{run_volatility_walk_forward()}, \code{run_direction_walk_forward()} & Treinam e avaliam baselines e modelos em cada dobra \\ \cline{2-3}
+ & \code{summarize_walk_forward()} & Calcula a média das métricas entre as dobras \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+O \autoref{qua:dependencias} mostra quais módulos cada componente consumidor
+importa. O módulo \code{modeling.py} não depende dos demais, o que facilita
+testá-lo com dados sintéticos.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:dependencias}Dependências entre componentes e módulos do pacote}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|Y|C{1.9cm}|C{1.9cm}|C{2.3cm}|C{2.3cm}|}
+\hline
+\textbf{Componente} & \code{config} & \code{etl} & \code{data_loader} & \code{modeling} \\ \hline
+\code{src/etl.py} & sim & -- & -- & -- \\ \hline
+\code{src/data_loader.py} & sim & -- & -- & -- \\ \hline
+Notebook do CP3 & sim & sim & sim & sim \\ \hline
+\code{app/dashboard.py} & sim & -- & sim & sim \\ \hline
+\code{tests/test_etl_and_modeling.py} & sim & sim & -- & sim \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\section{Tecnologias utilizadas}\label{sec:tecnologias}
+
+O projeto usa apenas bibliotecas de código aberto do ecossistema Python,
+listadas no \autoref{qua:tecnologias} com as versões mínimas declaradas em
+\code{requirements.txt}. O ambiente de referência é o Google Colab gratuito, que
+já traz instaladas as bibliotecas de manipulação e visualização.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:tecnologias}Bibliotecas e ferramentas do projeto}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.4cm}|C{2.2cm}|Y|}
+\hline
+\textbf{Biblioteca} & \textbf{Versão mínima} & \textbf{Uso no projeto} \\ \hline
+pandas \cite{mckinney2010} & 2.2 & Manipulação tabular, \code{groupby}, reamostragem; testado com 2.2 e 3.1 \\ \hline
+NumPy \cite{harris2020} & 1.26 & Operações vetoriais e logaritmos \\ \hline
+PyArrow \cite{arrow2026} & 15 & Leitura e gravação de Parquet; alocador de memória do sistema \\ \hline
+Matplotlib \cite{hunter2007} e seaborn \cite{waskom2021} & 3.8 e 0.13 & Gráficos estáticos dos notebooks \\ \hline
+scikit-learn \cite{pedregosa2011} & 1.5 & Modelos (Ridge, regressão logística, \textit{HistGradientBoosting}), \code{Pipeline}, \code{StandardScaler} e métricas \\ \hline
+Streamlit \cite{streamlit2026} & 1.38 & Aplicação web do painel interativo \\ \hline
+Plotly \cite{plotly2015} & 5.22 & Gráficos interativos do painel \\ \hline
+Jupyter e pytest & 8.0 (pytest) & Execução dos notebooks e testes automatizados \\ \hline
+Biblioteca padrão do Python & -- & \code{hashlib} (SHA-256), \code{urllib} (download), \code{zipfile} (candles da Binance) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}

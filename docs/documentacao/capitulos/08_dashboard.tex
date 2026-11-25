@@ -1,0 +1,145 @@
+% =============================================================================
+\chapter{Painel interativo}\label{cap:dashboard}
+% =============================================================================
+
+O painel interativo, implementado em \code{app/dashboard.py} com Streamlit
+\cite{streamlit2026} e Plotly \cite{plotly2015}, é o produto de visualização do
+\textit{Checkpoint}~3. Ele permite que a mesa de execução explore os indicadores
+das perguntas P1 a P3 com filtros por dia, janela horária, fuso e faixa de
+tamanho, e consulte os resultados da modelagem.
+
+\section{Arquitetura e desempenho}\label{sec:dasharquitetura}
+
+O painel não acessa a base bruta: ele consome somente os Parquets de
+\code{data/processed/}, por meio das funções de \code{src/data_loader.py} e
+\code{src/modeling.py}. Se os arquivos não existirem, exibe uma mensagem pedindo
+que o ETL seja executado antes. Para manter a interação fluida, as operações
+custosas são memorizadas com o decorador \code{st.cache_data} e executadas uma
+única vez por sessão do servidor:
+
+\begin{alineas}
+  \item leitura das barras de 1 minuto;
+  \item resumos centrais: resumo diário, distribuição de negócios por dia, hora e
+        faixa de tamanho (com \textit{cache} adicional em
+        \code{trade_size_hourly.parquet}) e agregação das ordens agressoras por
+        dia, hora e faixa, incluindo a contagem e o volume das ordens de
+        \usd~100 mil ou mais;
+  \item validação \textit{walk-forward} completa em barras de 1 minuto, para as
+        tarefas de volatilidade e direção.
+\end{alineas}
+
+Os filtros são aplicados depois, sobre esses resumos já agregados, o que evita
+reprocessar os 27,9 milhões de negócios a cada clique.
+
+\section{Filtros}\label{sec:filtros}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:filtros}Filtros da barra lateral do painel}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.4cm}|L{4.2cm}|Y|}
+\hline
+\textbf{Filtro} & \textbf{Opções} & \textbf{Efeito} \\ \hline
+Fuso horário & UTC; BRT (UTC$-3$) & Desloca o eixo horário de todos os perfis, barras e mapas de calor \\ \hline
+Recorte rápido de dias & Semana completa; apenas dias de estresse (21, 24 e 25/02); apenas dias calmos (19, 20, 22 e 23/02); seleção manual & Pré-seleciona os dias do filtro seguinte \\ \hline
+Dias incluídos & Cada dia, rotulado com o tipo (por exemplo, ``ter 25/02 $\cdot$ estresse'') & Restringe todos os gráficos e indicadores aos dias escolhidos \\ \hline
+Janela horária & Intervalo de 0h a 23h no fuso escolhido & Restringe barras, perfis e agregações às horas escolhidas \\ \hline
+Faixas de tamanho & As cinco faixas de \code{size_bucket} & Restringe as análises de concentração por tamanho (P2) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+Duas decisões de projeto devem ser conhecidas por quem usa o painel. Primeiro, o
+filtro de dias usa a data em UTC; ao escolher BRT, muda o rótulo das horas, mas
+cada dia continua delimitado pela meia-noite UTC. Segundo, as tabelas de
+modelagem da aba P3 resumem a validação \textit{walk-forward} da semana inteira e
+não respondem aos filtros, porque o treino depende da sequência completa de dias.
+
+\section{Indicadores e abas}\label{sec:abas}
+
+O topo do painel exibe o título, um resumo do filtro ativo e cinco indicadores
+recalculados a cada mudança de filtro. Abaixo deles, quatro abas organizam o
+conteúdo segundo a narrativa do projeto. A \autoref{fig:wireframe} mostra um
+esquema da interface, e o \autoref{qua:abas} detalha o conteúdo de cada aba.
+
+\begin{figure}[htbp]
+\caption{\label{fig:wireframe}Esquema da interface do painel interativo}
+\begin{center}
+\begin{tikzpicture}[font=\scriptsize, x=1cm, y=1cm]
+  % moldura
+  \draw[cinza, line width=0.6pt, rounded corners=2pt] (0,0) rectangle (15.8,9.6);
+  % barra lateral
+  \fill[cinzaclaro] (0.05,0.05) rectangle (3.9,9.55);
+  \node[anchor=north west, font=\footnotesize\bfseries] at (0.25,9.4) {Filtros da Mesa};
+  \foreach \y/\t in {8.6/Fuso horário, 7.7/Recorte rápido de dias, 6.8/Dias incluídos, 5.9/Janela horária, 5.0/Faixas de tamanho}{
+    \node[anchor=west, text=tinta] at (0.25,\y+0.15) {\t};
+    \draw[cinza, fill=white, rounded corners=1.5pt] (0.25,\y-0.45) rectangle (3.7,\y-0.05);
+  }
+  \node[anchor=north west, text width=3.4cm, align=left, text=tinta, font=\tiny] at (0.25,3.9)
+    {Fonte: Binance \textit{spot} BTC/USDT via Hugging Face (\texttt{c90f6087}), reconciliada 100\,\% com os candles oficiais.};
+  % título e legenda
+  \node[anchor=north west, font=\small\bfseries] at (4.2,9.4) {BTC/USDT -- Microestrutura da Calmaria ao Estresse};
+  \node[anchor=north west, text=tinta] at (4.2,8.85) {Filtro atual: dias, janela horária, fuso e número de minutos};
+  % KPIs
+  \foreach \i/\t in {0/Volume, 1/Negócios, 2/Amplitude, 3/Faixa de preço, 4/Saldo comprador}{
+    \pgfmathsetmacro{\x}{4.2+\i*2.3}
+    \draw[azul, fill=azulclaro, rounded corners=2pt] (\x,7.25) rectangle (\x+2.15,8.3);
+    \node[anchor=north, font=\tiny, text=tinta] at (\x+1.075,8.22) {\t};
+    \node[font=\footnotesize\bfseries] at (\x+1.075,7.6) {valor};
+  }
+  % abas
+  \foreach \i/\t in {0/Calmaria ao estresse, 1/P1 $\cdot$ Liquidez, 2/P2 $\cdot$ Estresse, 3/P3 $\cdot$ OFI e modelos}{
+    \pgfmathsetmacro{\x}{4.2+\i*2.88}
+    \ifnum\i=0
+      \draw[laranja, fill=laranjaclaro] (\x,6.45) rectangle (\x+2.8,6.95);
+    \else
+      \draw[cinza, fill=white] (\x,6.45) rectangle (\x+2.8,6.95);
+    \fi
+    \node[font=\tiny] at (\x+1.4,6.7) {\t};
+  }
+  % conteúdo
+  \draw[cinza, fill=white] (4.2,3.0) rectangle (15.6,6.3);
+  \node[text=tinta, align=center] at (9.9,4.65) {Preço de fechamento por hora e volume horário colorido pelo tipo de dia\\(gráficos interativos Plotly)};
+  \foreach \i/\t in {0/{1. Janela TWAP/VWAP (P1)}, 1/{2. Limites e capacidade (P2)}, 2/{3. Uso realista de sinais (P3)}}{
+    \pgfmathsetmacro{\x}{4.2+\i*3.85}
+    \draw[azul, fill=azulclaro!60, rounded corners=2pt] (\x,0.3) rectangle (\x+3.7,2.75);
+    \node[anchor=north, text width=3.4cm, align=center, font=\scriptsize\bfseries] at (\x+1.85,2.65) {\t};
+    \node[anchor=north, text width=3.4cm, align=center, text=tinta] at (\x+1.85,2.05) {recomendação para a mesa baseada nos achados};
+  }
+\end{tikzpicture}
+\end{center}
+\fonte{Elaborada pelos autores (2026). Esquema ilustrativo da disposição dos elementos de \texttt{app/dashboard.py}, não uma captura de tela.}
+\end{figure}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:abas}Indicadores e conteúdo das abas do painel}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.3cm}|Y|}
+\hline
+\textbf{Elemento} & \textbf{Conteúdo} \\ \hline
+Indicadores do topo & Volume negociado (\usd~bilhões); negócios executados (milhões); amplitude mediana de 1 minuto (bps); faixa de preço (mínima a máxima); saldo comprador líquido (\% do volume) \\ \hline
+Aba ``Da Calmaria ao Estresse'' & Preço de fechamento por hora e volume horário colorido pelo tipo de dia; plano de ação da mesa em três cartões: janela TWAP/VWAP (P1), limites e capacidade em estresse (P2) e uso realista de sinais preditivos (P3) \\ \hline
+Aba ``P1 $\cdot$ Liquidez Intradiária'' & Medianas por hora de volume, negócios e amplitude, com as três horas de maior volume em destaque; mapa de calor de volume por dia e hora; dispersão entre volume e amplitude por hora, com o $\rho$ de Spearman no título \\ \hline
+Aba ``P2 $\cdot$ Estresse \& Faixas de Tamanho'' & Volume e volatilidade realizada por dia, coloridos pelo tipo de dia; tabela de médias por regime; participação de cada faixa na contagem e no valor dos negócios; número de ordens agressoras de \usd~100 mil ou mais por dia \\ \hline
+Aba ``P3 $\cdot$ Fluxo (OFI) \& Modelagem'' & Saldo líquido diário do fluxo agressor; correlação de Pearson entre $\mathrm{OFI}_t$ e $r_{t+k}$ para $k$ de 0 a 10, com a faixa de ruído de 95\,\%; tabelas-resumo da validação \textit{walk-forward} para volatilidade e direção \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\section{Execução}\label{sec:dashexecucao}
+
+Com os Parquets gerados (\autoref{sec:comoexecutar}), o painel é iniciado a
+partir da raiz do repositório com o comando abaixo e abre no navegador, por
+padrão em \url{http://localhost:8501}.
+
+\begin{lstlisting}[language=bash]
+streamlit run app/dashboard.py
+\end{lstlisting}
+
+A primeira carga é a mais lenta, porque executa a validação
+\textit{walk-forward} e grava o \textit{cache} de faixas de tamanho; as interações
+seguintes reutilizam os resultados memorizados. O teste automatizado
+\code{test_streamlit_dashboard_renders_without_errors} executa o painel sem
+navegador e verifica que ele renderiza sem exceções, com cinco indicadores e
+quatro abas.

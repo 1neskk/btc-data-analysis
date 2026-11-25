@@ -1,0 +1,474 @@
+% =============================================================================
+\chapter{Auditoria de qualidade e ETL}\label{cap:etl}
+% =============================================================================
+
+Este capítulo documenta o \textit{Checkpoint}~2. A ordem das seções segue a do
+notebook \code{A3_CP2_auditoria_etl_eda.ipynb}: extração, auditoria do dado
+bruto (sem alterar nada, apenas medir), transformação, validação cruzada com a
+fonte primária e carga dos produtos analíticos. Cada problema encontrado na
+auditoria foi registrado em um log estruturado (\code{AUDIT_LOG}), e cada etapa
+da transformação, em uma tabela de linhagem (\code{LINEAGE}).
+
+\section{Extração com verificação de integridade}\label{sec:extracao}
+
+O arquivo é baixado de um endereço que fixa o \textit{commit} do repositório no
+Hugging Face e, em seguida, conferido por SHA-256 (\autoref{qua:ficha}). Se um
+único \textit{byte} estiver diferente, por download corrompido ou alteração do
+arquivo pelo fornecedor, a execução é interrompida e o arquivo inválido é
+apagado, em vez de seguir com dados errados. Esse é o primeiro filtro contra o
+\textit{garbage in}. O download grava primeiro um arquivo temporário
+(\code{.part}) e só o renomeia ao final, para nunca deixar um arquivo pela
+metade com o nome definitivo. Na execução registrada, o arquivo de 103,4~MB foi
+baixado em 16,9~s e carregado em 17,3~s, ocupando 1,80~GB de memória.
+
+Antes de carregar os dados, os metadados do Parquet já revelaram dois sinais de
+alerta: \code{trade_id} armazenado como texto, embora seja um número
+sequencial, e os dois carimbos de tempo armazenados como inteiros, não como
+data-hora.
+
+\section{Auditoria do dado bruto}\label{sec:auditoria}
+
+\subsection{Completude}\label{sec:completude}
+
+A completude foi verificada em três níveis: nulos explícitos, nulos disfarçados
+(textos vazios, \code{"null"}, \code{"N/A"}, zeros ou negativos onde não fazem
+sentido, identificadores não numéricos) e registros faltantes. Em um fluxo de
+negócios, um nulo também pode ser um negócio que deveria existir e não está no
+arquivo; como o \code{trade_id} da Binance é sequencial, buracos na sequência
+revelariam perdas.
+
+O resultado foi zero nulos explícitos, zero nulos disfarçados e
+\textbf{nenhum negócio faltante}: os 27.925.338 identificadores esperados
+($\max - \min + 1$) estão todos presentes, e os 10.080 minutos da semana têm
+pelo menos um negócio, com intervalo máximo de 8,2~s entre dois negócios
+consecutivos. O único problema de completude está nos \textbf{metadados}: o nome
+do arquivo indica o período até 26/02, mas o último negócio é de 25/02 às
+23:59:59~UTC; a data final do nome é exclusiva.
+
+\subsection{Unicidade e duplicatas aparentes}\label{sec:unicidade}
+
+Foram aplicados três testes, do mais estrito ao mais frouxo: linha inteira
+repetida (zero ocorrências), chave \code{trade_id} repetida (zero ocorrências)
+e \textbf{duplicata aparente}, isto é, linhas iguais em tudo exceto o
+\code{trade_id}. O terceiro teste marcou \textbf{11.631.537 linhas, 41,7\,\% da
+base}.
+
+A inspeção dos casos mostrou que essas linhas são o funcionamento normal do
+motor de negociação (\autoref{sec:microestrutura}): uma ordem agressora casada
+contra várias ordens passivas de mesmo preço e tamanho gera vários negócios no
+mesmo milissegundo, com identificadores consecutivos. A \autoref{tab:dropdup}
+quantifica o que aconteceria com uma remoção ingênua.
+
+\begin{table}[htbp]
+\caption{\label{tab:dropdup}Impacto de uma remoção ingênua de duplicatas aparentes}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{L{3.6cm}RRRR}
+\toprule
+Operação & Negócios apagados & \% dos negócios & Volume apagado (\usd~mi) & \% do volume \\
+\midrule
+\code{drop_duplicates()} ingênuo & 11.631.537 & 41,7 & 410,5 & 2,2 \\
+\bottomrule
+\end{tabularx}
+\end{corpotabela}
+\fontedados
+\end{table}
+
+A maioria das duplicatas aparentes são negócios minúsculos: a quantidade de
+0,00006~BTC (cerca de \usd~5,7, próximo do valor mínimo de ordem da Binance)
+aparece 10.156.068 vezes entre elas. \textbf{Decisão: manter.} Apagá-las
+distorceria qualquer métrica de contagem (P1 e P2) e o fluxo de ordens (P3). Em
+vez disso, o ETL cria uma tabela de ordens agressoras que agrupa as execuções
+parciais (\autoref{sec:ordens}), e a validação cruzada
+(\autoref{sec:validacaocruzada}) prova que essas linhas existem na fonte
+oficial.
+
+\subsection{Validade}\label{sec:validade}
+
+Os domínios foram verificados por regras explícitas: preços positivos e
+múltiplos do \textit{tick} de 0,01~USDT, quantidades positivas e múltiplas do
+passo de 0,00001~BTC, lados pertencentes a $\{-1, +1\}$ e
+$\{\text{buy}, \text{sell}\}$, carimbos dentro do período declarado. Todas
+passaram, com duas exceções de projeto: \code{exchange} e \code{symbol} têm
+cardinalidade~1, ou seja, não informam nada, e \code{trade_id} ocupa 503~MB como
+texto contra 223~MB como inteiro.
+
+A regra mais importante é a do carimbo de ingestão. Por definição,
+\code{ingest_ts} é o instante em que o fornecedor gravou o negócio; portanto
+deve ser posterior ao negócio e anterior à publicação do arquivo
+(25/10/2026). A \autoref{tab:ingest} mostra que a coluna tem apenas sete valores,
+um por dia de negociação, todos entre 2032 e 2037.
+
+\begin{table}[htbp]
+\caption{\label{tab:ingest}Valores distintos de \texttt{ingest\_ts} na base bruta}
+\begin{corpotabela}
+\begin{tabular}{llrr}
+\toprule
+\code{ingest_ts} convertido (UTC) & Dia dos negócios & Negócios & Atraso (anos) \\
+\midrule
+05/04/2032 16:40:00 & 19/02/2025 & 2.784.225 & 7,1 \\
+15/12/2032 23:10:00 & 20/02/2025 & 2.386.973 & 7,8 \\
+21/08/2033 06:20:00 & 21/02/2025 & 4.528.525 & 8,5 \\
+23/07/2034 15:23:20 & 22/02/2025 & 1.506.418 & 9,4 \\
+02/01/2035 09:30:00 & 23/02/2025 & 1.457.368 & 9,9 \\
+07/07/2035 03:00:00 & 24/02/2025 & 4.972.684 & 10,4 \\
+09/01/2037 23:20:00 & 25/02/2025 & 10.289.145 & 11,9 \\
+\bottomrule
+\end{tabular}
+\end{corpotabela}
+\fontedados
+\end{table}
+
+Nenhum registro passa na regra: \code{ingest_ts} está \textbf{100\,\% inválido}.
+É um campo corrompido no pipeline do fornecedor, provavelmente por unidade ou
+cálculo errado. Usado sem auditoria, por exemplo para medir a latência de
+coleta, produziria conclusões absurdas; é o caso clássico de \textit{Garbage
+In, Garbage Out}.
+
+\subsection{Consistência}\label{sec:consistencia}
+
+As colunas \code{raw_side} e \code{aggressor_side} concordam em 100\,\% das
+linhas, o que caracteriza redundância. A ordem dos identificadores e a ordem
+temporal também são consistentes: \code{trade_id} é estritamente crescente e
+\code{exchange_ts} é não decrescente, ou seja, nenhum negócio volta no tempo.
+
+\subsection{Exatidão e valores extremos}\label{sec:outliers}
+
+A quantidade negociada tem assimetria de 92,8 e curtose de 49.183. Nessas
+condições, a regra clássica da amplitude interquartil ($Q_3 + 1,5 \cdot
+\mathrm{IQR}$) marcaria como \textit{outlier} qualquer negócio acima de
+0,00064~BTC (cerca de \usd~60), isto é, \textbf{20,0\,\% de todos os negócios}.
+A regra pressupõe uma distribuição aproximadamente simétrica, o que não vale
+aqui. A \autoref{tab:top5} mostra os cinco maiores negócios: são reais e são
+justamente os que mais importam para a pergunta P2.
+
+\begin{table}[htbp]
+\caption{\label{tab:top5}Os cinco maiores negócios da semana, por valor financeiro}
+\begin{corpotabela}
+\begin{tabular}{rlrrlr}
+\toprule
+\code{trade_id} & Instante (UTC) & Preço (USDT) & Quantidade (BTC) & Lado & Valor (\usd) \\
+\midrule
+4.581.643.844 & 22/02/2025 19:05:43,614 & 96.419,17 & 56,34875 & venda & 5.433.099,71 \\
+4.590.361.579 & 25/02/2025 06:17:45,712 & 91.675,99 & 37,32239 & venda & 3.421.567,05 \\
+4.572.878.642 & 19/02/2025 19:00:26,039 & 95.625,00 & 24,82016 & venda & 2.373.427,80 \\
+4.581.688.503 & 22/02/2025 19:57:35,018 & 96.644,99 & 21,87568 & venda & 2.114.174,87 \\
+4.598.452.092 & 25/02/2025 23:05:54,389 & 89.050,32 & 21,50070 & compra & 1.914.644,22 \\
+\bottomrule
+\end{tabular}
+\end{corpotabela}
+\fontedados
+\end{table}
+
+O preço não apresenta saltos impossíveis (\textit{bad ticks}): o maior salto
+entre dois negócios consecutivos é de 0,187\,\%, durante a queda de 25/02, e não
+há nenhum salto acima de 1\,\%. \textbf{Decisão: não remover valores
+extremos}; em seu lugar, usar escala logarítmica nos gráficos, medianas quando a
+cauda distorce a média e faixas de tamanho (\code{size_bucket}).
+
+\subsection{Síntese da auditoria}\label{sec:sinteseauditoria}
+
+O \autoref{qua:auditoria} consolida os doze registros do log de auditoria, com a
+dimensão de qualidade, a evidência, a severidade e o tratamento definido.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:auditoria}Achados da auditoria de qualidade do dado bruto}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|C{0.5cm}|L{1.9cm}|L{2.4cm}|Y|L{1.6cm}|L{3.6cm}|}
+\hline
+\textbf{N.} & \textbf{Dimensão} & \textbf{Coluna} & \textbf{Achado e evidência} & \textbf{Severidade} & \textbf{Tratamento} \\ \hline
+1 & Completude & todas & Nenhum nulo explícito ou disfarçado (0 NaN; 0 vazios, ``null'' ou $\leq 0$) & -- & Nenhum \\ \hline
+2 & Completude & \code{trade_id} & Sequência completa: 27.925.338 IDs esperados e presentes & -- & Nenhum \\ \hline
+3 & Consistência & metadados & Período declarado (até 26/02) diferente do observado (até 25/02 23:59:59) & baixa & Documentar o período real \\ \hline
+4 & Unicidade & todas / \code{trade_id} & Sem duplicatas reais (0 linhas e 0 IDs repetidos) & -- & Deduplicação por chave como proteção idempotente \\ \hline
+5 & Unicidade & todas exceto \code{trade_id} & Duplicatas aparentes (execuções parciais): 11.631.537 linhas (41,7\,\%), 2,2\,\% do volume & alta (armadilha) & Manter; agregar em ordens agressoras \\ \hline
+6 & Validade & \code{ingest_ts} & Carimbos no futuro (2032 a 2037); 0\,\% passam na regra & crítica & Converter em nulo e descartar a coluna \\ \hline
+7 & Validade & \code{trade_id} & Número guardado como texto (503 MB contra 223 MB) & média & Converter para inteiro de 64 bits \\ \hline
+8 & Validade & \code{exchange_ts} & Data-hora guardada como inteiro em ms & média & Converter para data-hora UTC (\code{ts}) \\ \hline
+9 & Validade & \code{exchange}, \code{symbol} & Colunas constantes (cardinalidade 1) & baixa & Mover para metadados e remover \\ \hline
+10 & Consistência & \code{raw_side} $\times$ \code{aggressor_side} & Colunas redundantes (concordância de 100\,\%) & baixa & Manter uma só coluna categórica, \code{side} \\ \hline
+11 & Exatidão & \code{quantity}, valor & Cauda extremamente pesada: IQR marcaria 20\,\%; maior negócio de \usd~5,4 mi & informativa & Não remover; usar escala log, medianas e faixas \\ \hline
+12 & Exatidão & \code{price} & Sem \textit{bad ticks}: maior salto de 0,187\,\% & -- & Nenhum \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+Dois achados adicionais surgiram nas etapas seguintes e foram registrados no
+mesmo log: a divergência de unidade de tempo entre os candles oficiais e os
+negócios (\autoref{sec:validacaocruzada}) e os nulos estruturais ao reamostrar
+em barras de 1 segundo (\autoref{sec:gaps}).
+
+\section{Transformação}\label{sec:transformacao}
+
+Para não estourar a memória do Google Colab gratuito, a transformação é feita
+sobre o próprio \textit{DataFrame} carregado. O dado bruto continua intacto em
+disco (\code{data/raw/}, com resumo conferido) e pode ser relido a qualquer
+momento.
+
+\subsection{Adequação de tipos}\label{sec:tipos}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:tipos}Conversões de tipo aplicadas}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.4cm}|L{2.2cm}|L{3.0cm}|Y|}
+\hline
+\textbf{Coluna} & \textbf{De} & \textbf{Para} & \textbf{Justificativa} \\ \hline
+\code{trade_id} & texto & inteiro de 64 bits & Ocupa menos memória, ordena corretamente (como texto, ``10'' $<$ ``9'') e permite checar a sequência \\ \hline
+\code{exchange_ts} $\rightarrow$ \code{ts} & inteiro (ms) & data-hora UTC & Permite reamostrar, extrair hora e dia e é legível \\ \hline
+\code{aggressor_side} $\rightarrow$ \code{side} & inteiro ($\pm 1$) & categórica (\code{buy}/\code{sell}) & Rótulo explícito; a categoria ocupa 1 \textit{byte} por linha \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\subsection{Valores inválidos e estratégia para nulos}\label{sec:nulos}
+
+O procedimento padrão para um valor que viola uma regra de validade tem dois
+passos: convertê-lo em nulo explícito, para que nenhuma conta o use por engano,
+e então decidir o que fazer com o nulo. Após a invalidação, \code{ingest_ts}
+ficou com 27.925.338 nulos (100\,\%). O \autoref{qua:estrategias} compara as
+estratégias clássicas para esse caso.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:estrategias}Estratégias avaliadas para a coluna \texttt{ingest\_ts}}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{4.6cm}|Y|C{1.8cm}|}
+\hline
+\textbf{Estratégia} & \textbf{Aplicação neste caso} & \textbf{Veredito} \\ \hline
+Remover linhas com nulo & Apagaria a base inteira & rejeitada \\ \hline
+Imputar (média, mediana, último valor, cópia de \code{ts}) & Não há nenhum valor válido de referência; copiar \code{ts} fabricaria um dado que não existe & rejeitada \\ \hline
+Criar indicador e manter & O indicador seria constante (100\,\% inválido) e não informaria nada & rejeitada \\ \hline
+Remover a coluna & Nenhuma pergunta de negócio depende do instante de ingestão & adotada \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\subsection{Colunas constantes e redundantes}\label{sec:constantes}
+
+As colunas \code{exchange} e \code{symbol} viram metadados do
+\textit{DataFrame} (\code{df.attrs}), junto com o endereço da fonte e o SHA-256,
+em vez de 27,9 milhões de cópias da mesma palavra. As colunas \code{raw_side} e
+\code{aggressor_side} são substituídas pela coluna \code{side}.
+
+\subsection{Deduplicação idempotente}\label{sec:dedup}
+
+As duplicatas são removidas apenas pela chave \code{trade_id}. Hoje a operação
+remove zero linhas, mas torna o pipeline \textbf{idempotente}: se o arquivo for
+baixado duas vezes e concatenado por engano, por exemplo, o problema é corrigido
+automaticamente. As duplicatas aparentes são preservadas.
+
+\subsection{Novas variáveis}\label{sec:novasvariaveis}
+
+São criadas duas variáveis no nível do negócio. O valor financeiro,
+$\mathit{notional}_i = p_i \times q_i$, é a medida correta de tamanho, porque
+1~BTC a \usd~86 mil é menos dinheiro que 1~BTC a \usd~99 mil. A faixa de tamanho
+(\code{size_bucket}) é uma categórica ordenada com cinco níveis, intervalos
+fechados à esquerda, usada nos agrupamentos da pergunta P2.
+
+\subsection{Contrato de qualidade}\label{sec:contrato}
+
+Um contrato de dados é um conjunto de regras que a base tratada tem de cumprir.
+A função \code{validate_trades()} verifica as dez regras do
+\autoref{qua:contrato} e interrompe a execução (\code{assert}) se qualquer uma
+falhar, de modo que nenhuma análise rode sobre dado ruim. Na base tratada,
+todas passaram.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:contrato}Regras do contrato de qualidade da base tratada}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|C{0.6cm}|Y|C{2.0cm}|}
+\hline
+\textbf{N.} & \textbf{Regra} & \textbf{Resultado} \\ \hline
+1 & Nenhum valor nulo em nenhuma coluna & aprovada \\ \hline
+2 & \code{trade_id} único & aprovada \\ \hline
+3 & \code{trade_id} contíguo, sem buracos (diferença sempre igual a 1) & aprovada \\ \hline
+4 & \code{ts} em ordem cronológica & aprovada \\ \hline
+5 & \code{ts} dentro de [19/02/2025, 26/02/2025) UTC & aprovada \\ \hline
+6 & \code{price} $> 0$ & aprovada \\ \hline
+7 & \code{quantity} $> 0$ & aprovada \\ \hline
+8 & \code{side} $\in \{\text{buy}, \text{sell}\}$ & aprovada \\ \hline
+9 & \code{notional_usd} $= $ \code{price} $\times$ \code{quantity} & aprovada \\ \hline
+10 & Tipos esperados: inteiro de 64 bits, data-hora e categórica & aprovada \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\subsection{Linhagem: antes e depois}\label{sec:linhagem}
+
+A \autoref{tab:linhagem} reproduz a tabela de linhagem gerada pelo notebook. O
+ETL \textbf{não perdeu nenhum negócio}: as 27.925.338 linhas foram preservadas.
+Foram removidas cinco colunas sem informação útil, ajustados três tipos e
+criadas duas variáveis de análise. A memória caiu cerca de 35\,\%, de 1,80~GB
+para 1,17~GB, mesmo com as duas colunas novas.
+
+\begin{table}[htbp]
+\caption{\label{tab:linhagem}Linhagem da transformação da base de negócios}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{L{5.2cm}P{1.3cm}P{1.7cm}P{1.7cm}Y}
+\toprule
+Etapa & Colunas & Memória (MB) & Nulos & Observação \\
+\midrule
+0. Bruto & 9 & 1.801,7 & 0 & -- \\
+1. Tipos ajustados & 10 & 1.550,4 & 0 & \code{trade_id}, \code{ts} e \code{side} \\
+2a. \code{ingest_ts} inválido $\rightarrow$ nulo & 10 & 1.550,4 & 27.925.338 & 100\,\% nulos \\
+2b. Remoção de \code{ingest_ts} & 9 & 1.327,0 & 0 & coluna 100\,\% inválida \\
+3. Remoção de constantes e redundantes & 5 & 921,5 & 0 & metadados em \code{attrs} \\
+4. Duplicatas por chave & 5 & 921,5 & 0 & 0 removidas; aparentes mantidas \\
+5. Novas variáveis & 7 & 1.172,9 & 0 & \code{notional_usd}, \code{size_bucket} \\
+\bottomrule
+\end{tabularx}
+\end{corpotabela}
+\fonte{Elaborada pelos autores (2026), com dados de \citeonline{glitchlist2026}. Todas as etapas mantêm 27.925.338 linhas.}
+\end{table}
+
+\section{Validação cruzada com a fonte oficial}\label{sec:validacaocruzada}
+
+O fornecedor da base é um terceiro. Para provar que a base é confiável e
+completa, o ETL reconstrói candles de 1 minuto a partir dos negócios tratados e
+os compara com os candles oficiais publicados pela própria Binance
+\cite{binance2025}. Os sete arquivos diários são baixados com o SHA-256 que a
+Binance publica ao lado de cada arquivo.
+
+Um detalhe técnico precisou ser tratado antes da junção: os arquivos oficiais de
+2025 usam carimbos em \textbf{microssegundos}, enquanto os negócios usam
+\textbf{milissegundos}. Sem normalização, nenhum minuto casaria. A função de
+conversão detecta a unidade pela ordem de grandeza do valor (segundos,
+milissegundos, microssegundos ou nanossegundos). A \autoref{tab:validacao}
+mostra o resultado.
+
+\begin{table}[htbp]
+\caption{\label{tab:validacao}Concordância entre os candles reconstruídos e os candles oficiais da Binance}
+\begin{corpotabela}
+\begin{tabular}{lr}
+\toprule
+Critério de comparação & Minutos concordantes (\%) \\
+\midrule
+Minuto presente nas duas fontes & 100,00 \\
+Preço de abertura idêntico & 100,00 \\
+Preço máximo idêntico & 100,00 \\
+Preço mínimo idêntico & 100,00 \\
+Preço de fechamento idêntico & 100,00 \\
+Número de negócios idêntico & 100,00 \\
+Volume em BTC igual (tolerância relativa de $10^{-9}$) & 100,00 \\
+Volume em dólares igual (tolerância relativa de $10^{-9}$) & 100,00 \\
+Volume comprador igual (tolerância relativa de $10^{-9}$) & 100,00 \\
+\bottomrule
+\end{tabular}
+\end{corpotabela}
+\fonte{Elaborada pelos autores (2026), com dados de \citeonline{glitchlist2026} e \citeonline{binance2025}. Base de comparação: 10.080 minutos.}
+\end{table}
+
+Todos os 10.080 minutos coincidem, e o total de negócios é igual nas duas
+fontes (27.925.338). As diferenças de volume ficam na ordem de $10^{-13}$~BTC,
+arredondamento de ponto flutuante. Três conclusões decorrem disso: a base do
+fornecedor é fiel à Binance; nenhum negócio foi perdido, nem pelo fornecedor nem
+pelo ETL; e as duplicatas aparentes existem na fonte oficial, de modo que
+apagá-las teria sido um erro.
+
+\section{Carga e agregações}\label{sec:carga}
+
+\subsection{Barras de 1 minuto e de 1 segundo}\label{sec:barras}
+
+A função \code{build_bars()} agrupa os negócios pelo início do intervalo
+(\code{ts.dt.floor(freq)}) e calcula abertura, máxima, mínima, fechamento,
+volume em BTC e em dólares, número de negócios e volume comprador. O resultado é
+reindexado sobre uma \textbf{grade temporal completa}, de modo que intervalos sem
+negócio aparecem explicitamente como nulos. A função \code{add_bar_features()}
+acrescenta as variáveis do \autoref{qua:derivadas}. As barras de 1 minuto não
+têm nenhuma lacuna; as de 1 segundo têm, e exigem tratamento.
+
+\subsection{Nulos estruturais nas barras de 1 segundo}\label{sec:gaps}
+
+Dos 604.800 segundos da semana, \textbf{40.202 (6,6\,\%) não têm nenhum
+negócio}. Esses nulos são estruturais, não erro de coleta: o nulo significa
+``não houve negócio''. As lacunas são curtas (34.732 sequências, com mediana de
+1~s e máximo de 7~s) e concentram-se na madrugada: 11,5\,\% dos segundos das
+06h~UTC estão vazios, contra 2,5\,\% às 15h~UTC. O \autoref{qua:gaps} mostra o
+tratamento de cada coluna.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:gaps}Tratamento dos nulos estruturais nas barras de 1 segundo}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{4.0cm}|L{4.2cm}|Y|}
+\hline
+\textbf{Coluna} & \textbf{Tratamento} & \textbf{Justificativa} \\ \hline
+\code{close} & último preço conhecido (\code{ffill}) & O preço vigente é o do último negócio, convenção usual em finanças \\ \hline
+\code{open}, \code{high}, \code{low} & iguais ao \code{close} preenchido & Barra ``plana'': o preço não se moveu \\ \hline
+\code{volume_btc}, \code{volume_usd}, \code{n_trades}, \code{buy_volume_btc} & zero & Sem negócio significa volume zero, não valor desconhecido \\ \hline
+\code{vwap}, \code{ofi}, \code{avg_trade_usd} & \code{close}, 0 e 0 & Valores neutros para razões indefinidas (0/0) \\ \hline
+\code{has_trades} (nova) & indicador booleano & Preserva a informação de que o valor foi preenchido \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+Duas alternativas foram rejeitadas. A \textbf{interpolação linear} usaria o
+preço futuro para preencher o passado (viés de antecipação, ou
+\textit{look-ahead bias}) e contaminaria qualquer modelo preditivo. A
+\textbf{remoção dos segundos vazios} quebraria a grade regular de tempo exigida
+por médias móveis e defasagens. O \autoref{qua:fillgaps} mostra o trecho de
+código que implementa o preenchimento causal; o teste automatizado
+correspondente está descrito no \autoref{cap:reprodutibilidade}.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:fillgaps}Trecho de \texttt{src/etl.py}: preenchimento de lacunas sem viés de antecipação}
+\begin{minipage}{\textwidth}
+\SingleSpacing
+\begin{lstlisting}[language=Python]
+def fill_bar_gaps(bars: pd.DataFrame) -> pd.DataFrame:
+    filled = bars.copy()
+    filled["has_trades"] = filled["n_trades"].notna()
+    for col in ("volume_btc", "volume_usd", "n_trades", "buy_volume_btc"):
+        filled[col] = filled[col].fillna(0)
+    filled["close"] = filled["close"].ffill()       # só olha para trás
+    for col in ("open", "high", "low"):
+        filled[col] = filled[col].fillna(filled["close"])
+    filled["n_trades"] = filled["n_trades"].astype("int64")
+    return filled
+\end{lstlisting}
+\end{minipage}
+\fonte{Repositório do projeto (2026).}
+\end{quadro}
+
+\subsection{Ordens agressoras}\label{sec:ordens}
+
+Em vez de apagar as execuções parciais, o ETL as agrupa. Negócios consecutivos
+com o mesmo milissegundo e o mesmo lado vêm, quase certamente, da mesma ordem
+agressora; a Binance usa critério semelhante em seu arquivo oficial de negócios
+agregados. A função \code{build_taker_orders()} marca o início de uma nova ordem
+sempre que o carimbo ou o lado mudam em relação à linha anterior e soma
+quantidade e valor de cada grupo.
+
+O resultado são \textbf{4.555.252 ordens agressoras}, com média de 6,1
+execuções por ordem; 65,4\,\% das ordens têm uma única execução, e a maior
+reuniu 2.024 execuções e \usd~7,2 milhões. Trata-se de uma aproximação: duas
+ordens diferentes, de participantes distintos, no mesmo milissegundo e no mesmo
+lado seriam fundidas. Para medir o perfil de tamanho das ordens, o erro é
+desprezível.
+
+\subsection{Produtos gravados}\label{sec:produtos}
+
+Os quatro produtos analíticos são gravados em Parquet com compressão ZSTD em
+\code{data/processed/} (\autoref{tab:produtos}). O dicionário de cada arquivo
+está no \autoref{apendice:dicionario}. O painel ainda grava um quinto arquivo,
+\code{trade_size_hourly.parquet}, como \textit{cache} da agregação por faixa de
+tamanho.
+
+\begin{table}[htbp]
+\caption{\label{tab:produtos}Arquivos gerados pela etapa de carga}
+\begin{corpotabela}
+\begin{tabular}{llrrr}
+\toprule
+Arquivo & Granularidade & Linhas & Colunas & Tamanho (MB) \\
+\midrule
+\code{trades_clean.parquet} & 1 linha por negócio & 27.925.338 & 7 & 244,8 \\
+\code{bars_1min.parquet} & 1 linha por minuto & 10.080 & 15 & 1,2 \\
+\code{bars_1s.parquet} & 1 linha por segundo & 604.800 & 16 & 35,7 \\
+\code{taker_orders.parquet} & 1 linha por ordem agressora & 4.555.252 & 10 & 89,2 \\
+\bottomrule
+\end{tabular}
+\end{corpotabela}
+\fontedados
+\end{table}

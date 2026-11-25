@@ -1,0 +1,137 @@
+% =============================================================================
+\chapter{Matriz de atendimento aos requisitos e à rubrica da A3}\label{apendice:matriz}
+% =============================================================================
+
+O \autoref{qua:rubrica} relaciona cada critério da rubrica de avaliação da A3
+\cite{usjt2026} às seções deste documento e aos arquivos do repositório que o
+atendem. O \autoref{qua:regras} faz o mesmo com as regras gerais do projeto.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:rubrica}Critérios da rubrica da A3 e onde são atendidos}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.4cm}|C{1.2cm}|Y|L{3.8cm}|}
+\hline
+\textbf{Critério} & \textbf{Pontos} & \textbf{Onde é atendido neste documento} & \textbf{Arquivos do repositório} \\ \hline
+1. Diagnóstico do problema e \textit{dataset} & 5,0 & Contexto, objetivos e perguntas (\autoref{cap:introducao}); base, aderência e dicionário (\autoref{cap:base}) & \code{CHECKPOINT_1.md} \\ \hline
+2. Qualidade do código e processo ETL & 10,0 & Arquitetura e módulos (\autoref{cap:arquitetura}); auditoria, nulos, duplicatas, tipos, contrato e validação cruzada (\autoref{cap:etl}); testes (\autoref{cap:reprodutibilidade}) & Notebook do CP2; \code{src/etl.py}; \code{tests/} \\ \hline
+3. Análise exploratória e métricas & 10,0 & Estatísticas, \code{groupby}, séries temporais, correlações e respostas P1 a P3 (\autoref{cap:eda}); modelagem (\autoref{cap:modelagem}) & Notebooks do CP2 e do CP3; \code{src/data_loader.py}; \code{src/modeling.py} \\ \hline
+4. \textit{Data Storytelling} e visualização & 10,0 & Gráficos (\autoref{cap:eda} e \autoref{cap:modelagem}); painel (\autoref{cap:dashboard}); narrativa e matriz de decisão (\autoref{cap:storytelling}) & \code{app/dashboard.py}; \code{STORYTELLING.md}; notebook do CP3 \\ \hline
+5. Ética, LGPD e comunicação & 5,0 & LGPD, reidentificação, licença, vieses e riscos (\autoref{cap:etica}) & \code{ETHICS_LGPD.md}; \textit{slides} (pendentes) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:regras}Regras gerais da A3 e situação do projeto}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{4.6cm}|Y|C{2.0cm}|}
+\hline
+\textbf{Regra} & \textbf{Evidência} & \textbf{Situação} \\ \hline
+Grupo de 2 a 3 alunos & 2 integrantes (\autoref{sec:equipe}) & atendida \\ \hline
+Base real e pública & Hugging Face, validada contra a Binance (\autoref{sec:fonte}) & atendida \\ \hline
+Mínimo de 1.000 registros & 27.925.338 registros & atendida \\ \hline
+De 8 a 10 colunas de tipos variados & 9 colunas numéricas, categóricas e temporais (\autoref{sec:dicionario}) & atendida \\ \hline
+Oportunidades reais de limpeza & 14 achados registrados no log de auditoria (\autoref{sec:sinteseauditoria}) & atendida \\ \hline
+CP1: grupo, cenário, base, dicionário e 3 perguntas & \code{CHECKPOINT_1.md} & entregue \\ \hline
+CP2: notebook comentado com auditoria, tratamento, limpeza e EDA & \code{notebooks/A3_CP2_auditoria_etl_eda.ipynb} & entregue \\ \hline
+CP3: \textit{slides}, painel ou gráficos, ética e LGPD, código consolidado & Painel, código, ética e esta documentação; \textit{slides} pendentes & parcial \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+% =============================================================================
+\chapter{Dicionário dos produtos analíticos}\label{apendice:dicionario}
+% =============================================================================
+
+Este apêndice descreve as colunas dos quatro arquivos Parquet gravados em
+\code{data/processed/}. As barras de 1 minuto e de 1 segundo têm o mesmo
+esquema, exceto pela coluna \code{has_trades}, exclusiva das barras de 1 segundo.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:dictrades}Colunas de \texttt{trades\_clean.parquet} (1 linha por negócio)}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{2.8cm}|L{3.0cm}|Y|}
+\hline
+\textbf{Coluna} & \textbf{Tipo} & \textbf{Descrição} \\ \hline
+\code{trade_id} & inteiro de 64 bits & Identificador sequencial do negócio na Binance (único e contíguo) \\ \hline
+\code{ts} & data-hora UTC & Instante da execução, com precisão de milissegundo \\ \hline
+\code{price} & real & Preço de execução (USDT por BTC) \\ \hline
+\code{quantity} & real & Quantidade negociada (BTC) \\ \hline
+\code{side} & categórica & Lado do agressor: \code{buy}, o comprador tomou a oferta; \code{sell}, o vendedor atingiu a demanda \\ \hline
+\code{notional_usd} & real & Valor financeiro do negócio, \code{price} $\times$ \code{quantity} (\usd) \\ \hline
+\code{size_bucket} & categórica ordenada & Faixa de valor do negócio \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:dicbars}Colunas de \texttt{bars\_1min.parquet} e \texttt{bars\_1s.parquet} (1 linha por intervalo, índice \texttt{ts})}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.0cm}|L{2.0cm}|Y|}
+\hline
+\textbf{Coluna} & \textbf{Tipo} & \textbf{Descrição} \\ \hline
+\code{open}, \code{high}, \code{low}, \code{close} & real & Primeiro, máximo, mínimo e último preço do intervalo (USDT) \\ \hline
+\code{volume_btc} & real & Quantidade total negociada (BTC) \\ \hline
+\code{volume_usd} & real & Valor total negociado (\usd) \\ \hline
+\code{n_trades} & inteiro & Número de negócios \\ \hline
+\code{buy_volume_btc} & real & Volume em que o agressor foi comprador (BTC) \\ \hline
+\code{sell_volume_btc} & real & Volume em que o agressor foi vendedor (BTC) \\ \hline
+\code{vwap} & real & Preço médio ponderado pelo volume; igual ao fechamento quando não há negócio \\ \hline
+\code{ofi} & real & Desequilíbrio do fluxo agressor, entre $-1$ e $+1$ (\autoref{eq:ofi}); 0 quando não há negócio \\ \hline
+\code{log_return} & real & Retorno logarítmico em relação ao fechamento anterior (\autoref{eq:retorno}) \\ \hline
+\code{abs_return_bps} & real & Valor absoluto do retorno, em pontos-base \\ \hline
+\code{range_bps} & real & Amplitude do intervalo, em pontos-base (\autoref{eq:amplitude}) \\ \hline
+\code{avg_trade_usd} & real & Valor médio por negócio (\usd); 0 quando não há negócio \\ \hline
+\code{has_trades} & booleano & Somente em 1~s: indica se houve negócio no segundo \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\begin{quadro}[htbp]
+\caption{\label{qua:dicorders}Colunas de \texttt{taker\_orders.parquet} (1 linha por ordem agressora, índice \texttt{order\_id})}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.0cm}|L{2.4cm}|Y|}
+\hline
+\textbf{Coluna} & \textbf{Tipo} & \textbf{Descrição} \\ \hline
+\code{ts} & data-hora UTC & Instante da primeira execução da ordem \\ \hline
+\code{side} & categórica & Lado do agressor \\ \hline
+\code{first_trade_id} & inteiro & Identificador do primeiro negócio da ordem \\ \hline
+\code{n_fills} & inteiro & Número de execuções parciais agrupadas \\ \hline
+\code{quantity} & real & Quantidade total da ordem (BTC) \\ \hline
+\code{notional_usd} & real & Valor total da ordem (\usd) \\ \hline
+\code{price_first}, \code{price_last} & real & Preço da primeira e da última execução \\ \hline
+\code{book_walk_bps} & real & Distância entre o primeiro e o último preço executado, em pontos-base \\ \hline
+\code{size_bucket} & categórica ordenada & Faixa de valor da ordem \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+% =============================================================================
+\chapter{Lista completa de atributos dos modelos}\label{apendice:atributos}
+% =============================================================================
+
+O \autoref{qua:listaatributos} lista os nomes das colunas geradas por
+\code{build_lagged_features()}. Os sufixos \code{t0} e \code{lagN} indicam o
+intervalo atual e a defasagem de $N$ intervalos; \code{ma_W} e \code{std_W}
+indicam média e desvio-padrão móveis nos últimos $W$ intervalos.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:listaatributos}Atributos de entrada dos modelos, por família}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.0cm}|Y|C{1.2cm}|}
+\hline
+\textbf{Família} & \textbf{Atributos} & \textbf{Total} \\ \hline
+Fluxo (OFI) & \code{ofi_t0}, \code{ofi_lag1}, \code{ofi_lag2}, \code{ofi_lag3}, \code{ofi_lag5}, \code{ofi_ma_5}, \code{ofi_ma_15}, \code{ofi_ma_60} & 8 \\ \hline
+Atividade & \code{log_vol_usd_t0}, \code{log_vol_usd_lag1}, \code{log_vol_usd_lag2}, \code{log_vol_usd_lag3}, \code{log_vol_usd_lag5}, \code{log_n_trades_t0}, \code{log_n_trades_lag1}, \code{log_n_trades_lag2}, \code{log_n_trades_lag3}, \code{log_n_trades_lag5}, \code{log_avg_trade_t0}, \code{log_vol_ma_5}, \code{log_vol_ma_15}, \code{log_vol_ma_60}, \code{ofi_x_log_vol_t0}; em 1~s, também \code{has_trades_t0} & 15 (16) \\ \hline
+Volatilidade e retorno & \code{range_bps_t0}, \code{range_bps_lag1}, \code{range_bps_lag2}, \code{range_bps_lag3}, \code{range_bps_lag5}, \code{abs_ret_bps_t0}, \code{abs_ret_bps_lag1}, \code{abs_ret_bps_lag2}, \code{abs_ret_bps_lag3}, \code{abs_ret_bps_lag5}, \code{ret_bps_t0}, \code{ret_bps_lag1}, \code{ret_bps_lag2}, \code{ret_bps_lag3}, \code{ret_bps_lag5}, \code{range_bps_ma_5}, \code{range_bps_ma_15}, \code{range_bps_ma_60}, \code{abs_ret_bps_ma_5}, \code{abs_ret_bps_ma_15}, \code{abs_ret_bps_ma_60}, \code{ret_bps_std_5}, \code{ret_bps_std_15}, \code{ret_bps_std_60}, \code{range_ratio_5_60} & 25 \\ \hline
+Sazonalidade & \code{sin_hour}, \code{cos_hour} & 2 \\ \hline
+\multicolumn{2}{|r|}{\textbf{Total do conjunto \code{completo}}} & \textbf{50 (51)} \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}

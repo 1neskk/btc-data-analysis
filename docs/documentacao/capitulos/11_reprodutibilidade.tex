@@ -1,0 +1,110 @@
+% =============================================================================
+\chapter{Testes e reprodutibilidade}\label{cap:reprodutibilidade}
+% =============================================================================
+
+\section{Testes automatizados}\label{sec:testes}
+
+O arquivo \code{tests/test_etl_and_modeling.py} reúne sete testes escritos com
+pytest. Seis deles usam pequenos conjuntos sintéticos e não dependem da base
+real; o sétimo executa o painel e só roda quando os Parquets processados estão
+disponíveis (\autoref{qua:testes}).
+
+\begin{quadro}[htbp]
+\caption{\label{qua:testes}Testes automatizados do projeto}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{6.4cm}|Y|}
+\hline
+\textbf{Teste} & \textbf{O que garante} \\ \hline
+\code{test_clean_and_validate_trades_contract} & A limpeza remove \code{ingest_ts} inválido e as colunas constantes, preserva \code{exchange} e \code{symbol} nos metadados, mapeia corretamente o lado do agressor e produz uma base que passa no contrato de qualidade \\ \hline
+\code{test_build_bars_and_fill_bar_gaps_no_lookahead} & A grade de 1 segundo tem o número correto de barras; segundos vazios aparecem como nulos e são preenchidos com o preço \textbf{anterior}, nunca com o futuro; volume zero, OFI neutro e VWAP igual ao último preço \\ \hline
+\code{test_build_taker_orders_merges_consecutive_same_ts_and_side} & Negócios consecutivos de mesmo milissegundo e lado formam uma única ordem, com quantidade somada e \textit{book walk} positivo \\ \hline
+\code{test_build_lagged_features_strictly_causal_no_lookahead} & Perturbar drasticamente preços, OFI e volume a partir de um instante não altera nenhum atributo anterior a ele \\ \hline
+\code{test_daily_walk_forward_folds_chronological} & Todas as observações de treino são anteriores ao dia de teste, e cada dobra testa exatamente um dia \\ \hline
+\code{test_prepare_modeling_dataset_shapes} & O conjunto de modelagem não tem nulos, atributos e alvos têm o mesmo tamanho, e os grupos de atributos existem nas colunas \\ \hline
+\code{test_streamlit_dashboard_renders_without_errors} & O painel renderiza sem exceções, com cinco indicadores e quatro abas (ignorado se os Parquets não existirem) \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+Para esta documentação, a suíte foi executada em 25/11/2026, em ambiente limpo,
+com Python 3.13, pandas 3.0, NumPy 2.5, scikit-learn 1.9 e Streamlit 1.67. O
+resultado foi de \textbf{seis testes aprovados e um ignorado}: o teste do painel
+foi ignorado porque, nesse ambiente, os Parquets processados não haviam sido
+gerados.
+
+\section{Como executar}\label{sec:comoexecutar}
+
+\subsection{No Google Colab}\label{sec:colab}
+
+É a forma recomendada para o notebook do \textit{Checkpoint}~2, que baixa os
+dados sozinho: no Colab, escolher \textit{Arquivo} $\rightarrow$ \textit{Fazer
+upload de notebook}, selecionar o arquivo \code{.ipynb} e então
+\textit{Ambiente de execução} $\rightarrow$ \textit{Executar tudo}. A execução
+leva de 1 a 3 minutos e cabe na memória do Colab gratuito.
+
+\subsection{Localmente}\label{sec:local}
+
+A partir da raiz do repositório, criar um ambiente virtual e instalar as
+dependências:
+
+\begin{lstlisting}[language=bash]
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+\end{lstlisting}
+
+Em seguida, gerar e validar os Parquets de \code{data/processed/} pelo pipeline
+consolidado (a função é idempotente: se os arquivos já existirem, nada é
+refeito):
+
+\begin{lstlisting}[language=bash]
+python -m src.etl
+\end{lstlisting}
+
+Os notebooks são abertos a partir da pasta \code{notebooks/}, o painel é iniciado
+como descrito na \autoref{sec:dashexecucao}, e os testes rodam a partir da raiz:
+
+\begin{lstlisting}[language=bash]
+cd notebooks && jupyter notebook A3_CP3_modelagem_storytelling.ipynb
+streamlit run app/dashboard.py
+python -m pytest -q tests/
+\end{lstlisting}
+
+\section{Requisitos de ambiente e cuidados com memória}\label{sec:memoria}
+
+A base tem 27,9 milhões de linhas, e o Colab gratuito oferece cerca de 12~GB de
+RAM. O pico de uso medido foi de aproximadamente 6~GB com pandas~3 e 9~GB com
+pandas~2.2. Para caber nesse limite, o projeto adota as seguintes técnicas:
+
+\begin{alineas}
+  \item textos armazenados no formato compacto do Arrow (padrão no pandas 3 e
+        ativado explicitamente no 2.x);
+  \item alocador de memória do sistema no PyArrow, que devolve ao sistema
+        operacional a memória liberada, e liberação explícita após leituras
+        grandes;
+  \item transformação sobre o próprio \textit{DataFrame} carregado, com o bruto
+        preservado em disco, e remoção de objetos auxiliares seguida de coleta de
+        lixo;
+  \item leitura apenas das colunas necessárias nos produtos derivados e
+        \textit{cache} das agregações usadas pelo painel.
+\end{alineas}
+
+A correlação de Spearman no pandas depende da biblioteca SciPy, que não aparece
+explicitamente em \code{requirements.txt}, mas é instalada como dependência do
+scikit-learn e já vem no Colab.
+
+\section{Garantias de reprodutibilidade}\label{sec:garantias}
+
+Os resultados podem ser reproduzidos por qualquer pessoa porque o projeto fixa
+todas as fontes de variação controláveis:
+
+\begin{alineas}
+  \item \textbf{dados}: \textit{commit} da base e SHA-256 fixados; candles da
+        Binance conferidos pelo SHA-256 publicado pela própria corretora;
+  \item \textbf{código}: um único pacote (\code{src/}) compartilhado por
+        notebooks, painel e testes, versionado em Git;
+  \item \textbf{aleatoriedade}: semente fixa (\code{random_state=42}) nos modelos
+        de árvore; os demais modelos são determinísticos;
+  \item \textbf{ordem temporal}: dobras \textit{walk-forward} cronológicas e
+        atributos estritamente causais, verificados por testes.
+\end{alineas}

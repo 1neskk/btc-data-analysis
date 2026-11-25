@@ -1,0 +1,131 @@
+% =============================================================================
+\chapter{Ética, LGPD e limitações}\label{cap:etica}
+% =============================================================================
+
+Este capítulo consolida a análise de governança do projeto: a conformidade com a
+LGPD \cite{brasil2018}, o respeito à licença da fonte, os vieses e limitações dos
+dados e do método e os riscos de transformar análises estatísticas em decisões
+automatizadas. A versão detalhada está em \code{ETHICS_LGPD.md}.
+
+\section{Conformidade com a LGPD}\label{sec:lgpd}
+
+Nos termos do art.~5º, inciso~I, da LGPD, dado pessoal é a ``informação
+relacionada a pessoa natural identificada ou identificável''
+\cite[art.~5º, I]{brasil2018}. A base analisada contém exclusivamente registros
+públicos de execução no livro de ofertas à vista de BTC/USDT da Binance. O
+\autoref{qua:lgpd} avalia cada campo.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:lgpd}Avaliação dos campos da base quanto à presença de dados pessoais}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.0cm}|Y|L{4.6cm}|}
+\hline
+\textbf{Campo} & \textbf{Natureza} & \textbf{Contém dado pessoal?} \\ \hline
+\code{trade_id} & Número sequencial atribuído pelo motor de casamento da corretora & Não. Identifica um evento de mercado, sem vínculo público com conta, CPF, CNPJ ou carteira \\ \hline
+\code{exchange_ts} (\code{ts}) & Instante da execução pública, em UTC & Não. Metadado temporal de mercado \\ \hline
+\code{price}, \code{quantity} & Preço e quantidade executados no livro público & Não. Informação pública de formação de preço \\ \hline
+\code{aggressor_side} (\code{side}) & Lado do agressor (compra ou venda) & Não. Dinâmica impessoal de oferta e demanda \\ \hline
+\code{exchange}, \code{symbol} & Constantes técnicas (\code{binance}, \code{BTCUSDT}) & Não \\ \hline
+\code{ingest_ts} & Carimbo de coleta do fornecedor, 100\,\% inválido & Não; além disso, foi descartado na limpeza \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+Não há titular identificável nem dado pessoal sensível (art.~5º, II). Como a LGPD
+regula o tratamento de dados pessoais, o tratamento de dados de mercado anônimos
+fica fora do seu escopo. Mesmo que houvesse dado pessoal, o art.~4º, inciso~II,
+alínea~b, afasta a aplicação da lei ao tratamento realizado para fins
+exclusivamente acadêmicos, ressalvados os arts.~7º e 11.
+
+Ainda assim, o projeto aplica, por boa prática, os princípios do art.~6º. Pelo
+princípio da \textbf{necessidade}, foram removidas as colunas constantes,
+redundantes e corrompidas, mantendo-se apenas o necessário às perguntas de
+negócio. Pelo princípio da \textbf{qualidade dos dados}, a base passou por
+contrato de qualidade e por validação cruzada com a fonte primária. Pelo
+princípio da \textbf{transparência}, todas as decisões de tratamento estão
+documentadas.
+
+\section{Risco residual de reidentificação}\label{sec:reidentificacao}
+
+Embora a base isolada seja impessoal, em uma mesa real existiria um risco
+conceitual de reidentificação indireta se os registros públicos fossem cruzados
+com logs internos de ordens da própria mesa, com cadastros de clientes
+(processos de identificação de clientes, ou KYC) ou com movimentações em
+\textit{blockchain} próximas ao instante de uma ordem. O projeto mitiga esse risco
+de três formas: opera exclusivamente sobre o fluxo público, sem nenhum
+cruzamento com cadastros, carteiras ou logs de clientes; trabalha
+predominantemente com agregações temporais (barras de 1 minuto e 1 segundo); e
+reconstrói ordens agressoras apenas por contiguidade temporal, sem atribuição de
+autoria.
+
+\section{Licença e reprodutibilidade}\label{sec:licenca}
+
+A base está sob licença de uso pessoal e acadêmico, com redistribuição proibida
+\cite{glitchlist2026}. Os controles técnicos adotados são:
+
+\begin{alineas}
+  \item \textbf{sem redistribuição}: o arquivo \code{.gitignore} bloqueia toda a
+        pasta \code{data/}; nenhum Parquet bruto ou processado é versionado;
+  \item \textbf{download na origem e imutabilidade}: o código fixa o
+        \textit{commit} da base no Hugging Face e confere o SHA-256 antes de
+        qualquer processamento;
+  \item \textbf{finalidade acadêmica}: código, documentação e painel destinam-se
+        à avaliação da unidade curricular e à demonstração metodológica em um
+        cenário simulado;
+  \item \textbf{fonte primária apenas para validação}: os candles da Binance
+        \cite{binance2025} são usados somente para reconciliar a base.
+\end{alineas}
+
+As figuras deste documento mostram apenas agregações e estatísticas derivadas,
+não os registros da base.
+
+\section{Vieses e limitações}\label{sec:vieses}
+
+O recorte escolhido traz vieses que limitam a generalização dos resultados. O
+\autoref{qua:vieses} resume cada um e o seu impacto na interpretação.
+
+\begin{quadro}[htbp]
+\caption{\label{qua:vieses}Vieses e limitações dos dados e do método}
+\begin{corpotabela}
+\begin{tabularx}{\textwidth}{|L{3.3cm}|Y|L{5.0cm}|}
+\hline
+\textbf{Dimensão} & \textbf{Limitação} & \textbf{Impacto na interpretação} \\ \hline
+Seleção temporal & Apenas 7 dias (19 a 25/02/2025), marcados pelo ataque à Bybit e por queda de 13,5\,\%; saldo vendedor em todos os dias & Os padrões não representam semanas neutras ou de alta \\ \hline
+Única corretora & Somente a Binance \textit{spot}, a de maior liquidez global & Outras corretoras e mercados de derivativos podem ter horários de pico e profundidade diferentes \\ \hline
+Único par & Somente BTC/USDT, o par mais líquido do mercado & Outros criptoativos e pares contra moeda fiduciária têm \textit{spreads} e lacunas de liquidez maiores \\ \hline
+Amostra horária curta & Apenas 7 observações por hora do dia, das quais 3 em estresse & As medianas horárias são indicativas, não definitivas \\ \hline
+Reconstrução de ordens & Negócios do mesmo milissegundo e lado são fundidos em uma ordem & Ordens independentes simultâneas podem ser somadas \\ \hline
+Qualidade do fornecedor & \code{ingest_ts} 100\,\% inválido e período declarado incorreto & Impede qualquer análise de latência de coleta; exigiu validação cruzada integral \\ \hline
+Sem livro de ofertas & A base contém apenas negócios, sem cotações nem profundidade & Não é possível medir o \textit{spread} cotado ou a liquidez em repouso, apenas o impacto realizado \\ \hline
+\end{tabularx}
+\end{corpotabela}
+\fonteautores[Elaborado]
+\end{quadro}
+
+\section{Riscos do uso de sinais de mercado}\label{sec:riscos}
+
+Mesmo com uma base limpa e validada, transformar análises em decisões
+automatizadas envolve riscos que a mesa precisa conhecer:
+
+\begin{alineas}
+  \item \textbf{ilusão preditiva diante dos custos}: acurácia ou ROC-AUC acima de
+        50\,\% não implica lucro; o ganho bruto dos sinais direcionais é muito menor
+        que as taxas, e operá-los geraria prejuízo por excesso de giro;
+  \item \textbf{quebra de regime}: modelos treinados em dias calmos subestimam a
+        escala da volatilidade e o tamanho das ordens durante choques; a
+        reavaliação contínua em janelas \textit{walk-forward} e limites rígidos
+        baseados em volatilidade são indispensáveis;
+  \item \textbf{vazamento de futuro e mineração de dados}: interpolação de lacunas,
+        normalização antes da divisão entre treino e teste ou atributos com
+        \code{shift(-1)} criam acurácia artificial; o projeto evita esses erros e os
+        testa automaticamente;
+  \item \textbf{impacto próprio e retroalimentação}: uma mesa que executa ordens
+        grandes sempre no mesmo horário, ou que reage mecanicamente ao OFI, passa
+        a gerar ela própria o desequilíbrio observado e aumenta o próprio
+        \textit{slippage};
+  \item \textbf{uso responsável}: os modelos são recomendados exclusivamente como
+        \textbf{apoio à decisão}, com supervisão humana, para dimensionar janelas
+        de execução e calibrar limites, e não como motor autônomo de
+        negociação.
+\end{alineas}

@@ -6,3 +6,7 @@ data/
 __pycache__/
 .ipynb_checkpoints/
 .agents/
+
+# Arquivos intermediários da compilação LaTeX da documentação
+docs/documentacao/build/
+docs/documentacao/build.log
