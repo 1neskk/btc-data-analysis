@@ -10,7 +10,7 @@ Analisamos **27,9 milhões de negócios** de BTC/USDT na Binance entre 19 e 25/0
 |---|---|---|
 | 1 — Diagnóstico & Escopo | ✅ | [`CHECKPOINT_1.md`](CHECKPOINT_1.md): grupo, cenário, base, dicionário de dados, 3 perguntas de negócio |
 | 2 — Auditoria & ETL | ✅ | [`notebooks/A3_CP2_auditoria_etl_eda.ipynb`](notebooks/A3_CP2_auditoria_etl_eda.ipynb): auditoria, limpeza, validação cruzada, EDA inicial |
-| 3 — Entrega final & Defesa | ⏳ | slides, dashboard, ética/LGPD, código consolidado |
+| 3 — Entrega final & Defesa | ⏳ | código consolidado (`src/`), modelagem & storytelling (`notebooks/A3_CP3_modelagem_storytelling.ipynb`), dashboard (`app/dashboard.py`), ética/LGPD (`ETHICS_LGPD.md`); slides pendentes |
 
 ## Base de dados
 
@@ -36,14 +36,44 @@ pip install -r requirements.txt
 cd notebooks && jupyter notebook A3_CP2_auditoria_etl_eda.ipynb
 ```
 
+### Pipeline consolidado e Modelagem (Checkpoint 3)
+
+```bash
+# 1. Gerar/validar os Parquets em data/processed/ (caso ainda não existam)
+python -m src.etl
+
+# 2. Executar o notebook de modelagem preditiva e Data Storytelling
+cd notebooks && jupyter notebook A3_CP3_modelagem_storytelling.ipynb
+```
+
+### Dashboard Interativo (Streamlit)
+
+O dashboard consome os arquivos processados em `data/processed/` (caso ainda não tenham sido gerados, rode `python -m src.etl` ou o notebook do Checkpoint 2 primeiro) e oferece filtros por dia, janela horária, fuso (**UTC** ou **BRT**) e faixa de tamanho:
+
+```bash
+streamlit run app/dashboard.py
+```
+
 ## Estrutura
 
 ```
 .
-├── CHECKPOINT_1.md                      # Diagnóstico & Escopo
+├── CHECKPOINT_1.md                          # Diagnóstico & Escopo
+├── ETHICS_LGPD.md                           # Análise de LGPD, licença, vieses e riscos de sinais
+├── STORYTELLING.md                          # Narrativa executiva "da calmaria ao estresse"
+├── src/                                     # Código consolidado reutilizável
+│   ├── config.py                            # Parâmetros, paleta e caminhos
+│   ├── etl.py                               # validate_trades, build_bars, fill_bar_gaps, run_etl_pipeline
+│   ├── data_loader.py                       # Leitura de data/processed/ e agregações P1–P3
+│   └── modeling.py                          # Atributos causais e validação walk-forward
+├── app/
+│   └── dashboard.py                         # Dashboard interativo (Streamlit + Plotly)
+├── tests/
+│   └── test_etl_and_modeling.py             # Testes unitários e de ausência de look-ahead
 ├── notebooks/
-│   └── A3_CP2_auditoria_etl_eda.ipynb   # Auditoria, ETL e EDA (executado, com saídas)
-├── data/                                # criada pelo notebook (não versionada)
+│   ├── A3_CP2_auditoria_etl_eda.ipynb       # Auditoria, ETL e EDA (executado, com saídas)
+│   └── A3_CP3_modelagem_storytelling.ipynb  # Modelagem preditiva (1min/1s) e Storytelling
+├── data/                                    # gerada pelo ETL/notebook (não versionada)
 │   ├── raw/        # parquet original (SHA-256 conferido)
 │   ├── external/   # candles oficiais da Binance (validação)
 │   └── processed/  # trades_clean, bars_1min, bars_1s, taker_orders (.parquet)

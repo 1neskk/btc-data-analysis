@@ -30,32 +30,32 @@ Checklist de entregas e pendências do projeto **Análise de Dados e Big Data (0
 ## Checkpoint 3 — Entrega Final & Defesa
 
 ### 1. Código Consolidado
-- [ ] Extrair e consolidar funções reutilizáveis do ETL (`build_bars`, `fill_bar_gaps`, `validate_trades`) a partir do notebook
-- [ ] Consumir os arquivos já processados em `data/processed/` na etapa de modelagem e dashboard
-- [ ] Atualizar [`requirements.txt`](requirements.txt) caso novas bibliotecas sejam adotadas no CP3 (ex.: modelagem e dashboard)
+- [x] Extrair e consolidar funções reutilizáveis do ETL (`build_bars`, `fill_bar_gaps`, `validate_trades`) a partir do notebook
+- [x] Consumir os arquivos já processados em `data/processed/` na etapa de modelagem e dashboard
+- [x] Atualizar [`requirements.txt`](requirements.txt) caso novas bibliotecas sejam adotadas no CP3 (ex.: modelagem e dashboard)
 
 ### 2. Modelagem Preditiva
-- [ ] Definir alvo e formulação do problema:
-  - [ ] Previsão de volatilidade do próximo intervalo (regressão)
-  - [ ] Previsão de direção do retorno (classificação)
-- [ ] Construir *features* defasadas (OFI, volume, amplitude, etc.) sem vazamento de futuro (*look-ahead*)
-- [ ] Testar horizontes mais curtos (barras de `1s` além de `1min`), combinações de variáveis e modelos não lineares
-- [ ] Implementar validação temporal (*walk-forward*)
-- [ ] Avaliar métricas e discutir viabilidade operacional do sinal para a mesa de execução
+- [x] Definir alvo e formulação do problema:
+  - [x] Previsão de volatilidade do próximo intervalo (regressão)
+  - [x] Previsão de direção do retorno (classificação)
+- [x] Construir *features* defasadas (OFI, volume, amplitude, etc.) sem vazamento de futuro (*look-ahead*)
+- [x] Testar horizontes mais curtos (barras de `1s` além de `1min`), combinações de variáveis e modelos não lineares
+- [x] Implementar validação temporal (*walk-forward*)
+- [x] Avaliar métricas e discutir viabilidade operacional do sinal para a mesa de execução
 
 ### 3. Dashboard Interativo
-- [ ] Implementar dashboard interativo com os indicadores de **P1** (liquidez intradiária), **P2** (dias de estresse e faixas de tamanho) e **P3** (OFI e retornos)
-- [ ] Adicionar filtros interativos por dia e hora (UTC / BRT)
-- [ ] Documentar instruções de execução do dashboard no [`README.md`](README.md)
+- [x] Implementar dashboard interativo com os indicadores de **P1** (liquidez intradiária), **P2** (dias de estresse e faixas de tamanho) e **P3** (OFI e retornos)
+- [x] Adicionar filtros interativos por dia e hora (UTC / BRT)
+- [x] Documentar instruções de execução do dashboard no [`README.md`](README.md)
 
 ### 4. Data Storytelling
-- [ ] Estruturar a narrativa **"da calmaria ao estresse"** voltada às decisões da mesa de execução
-- [ ] Consolidar gráficos e principais métricas/achados (janelas de execução TWAP/VWAP, limites por volatilidade realizada e capacidade operacional)
+- [x] Estruturar a narrativa **"da calmaria ao estresse"** voltada às decisões da mesa de execução
+- [x] Consolidar gráficos e principais métricas/achados (janelas de execução TWAP/VWAP, limites por volatilidade realizada e capacidade operacional)
 
 ### 5. Ética, Licença e LGPD
-- [ ] Aprofundar análise de conformidade com a **LGPD** (ausência de dados pessoais / art. 5º, I)
-- [ ] Formalizar conformidade com a licença da fonte (uso acadêmico, sem redistribuição de `data/`)
-- [ ] Documentar vieses e limitações (semana atípica de estresse, única corretora Binance, único par BTC/USDT, 7 observações por hora, reconstrução aproximada de ordens agressoras) e riscos do uso de sinais de mercado
+- [x] Aprofundar análise de conformidade com a **LGPD** (ausência de dados pessoais / art. 5º, I)
+- [x] Formalizar conformidade com a licença da fonte (uso acadêmico, sem redistribuição de `data/`)
+- [x] Documentar vieses e limitações (semana atípica de estresse, única corretora Binance, único par BTC/USDT, 7 observações por hora, reconstrução aproximada de ordens agressoras) e riscos do uso de sinais de mercado
 
 ### 6. Slides e Entrega Final
 - [ ] Criar apresentação (slides) para a defesa final
