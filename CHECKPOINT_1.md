@@ -8,11 +8,10 @@
 
 ## 1. Definição do grupo
 
-| Integrante | RA | Papel principal |
-|---|---|---|
-| _[Nome do(a) aluno(a) 1]_ | _[RA]_ | _[ex.: ETL e qualidade de dados]_ |
-| _[Daniel Almeida Portela]_ | _[825234443]_ | _[ex.: EDA e visualização]_ |
-| _[Nome do(a) aluno(a) 3]_ | _[RA]_ | _[ex.: storytelling, ética e LGPD]_ |
+| Integrante | RA |
+|---|---|
+| Gabriel Almeida Portela | 825233281 |
+| Daniel Almeida Portela | 825234443 |
 
 ---
 
